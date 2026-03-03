@@ -1,80 +1,332 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start
+description: Get up and running with GPU Memory Profiler in under 5 minutes
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before you begin, make sure you have:
 
-### Step 1: Set up your local environment
+- Python 3.10 or higher
+- pip package manager
+- (Optional) CUDA-enabled GPU for GPU profiling
+- (Optional) PyTorch 1.8+ or TensorFlow 2.4+
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Note>
+  GPU Memory Profiler works on CPU-only systems too! It automatically falls back to CPU memory tracking when CUDA isn't available.
+</Note>
+
+## Installation
+
+Install GPU Memory Profiler with your preferred framework support:
+
+<CodeGroup>
+
+```bash PyTorch
+pip install gpu-memory-profiler[torch]
+```
+
+```bash TensorFlow
+pip install gpu-memory-profiler[tf]
+```
+
+```bash Both frameworks
+pip install gpu-memory-profiler[all]
+```
+
+```bash Basic (no framework)
+pip install gpu-memory-profiler
+```
+
+</CodeGroup>
+
+For visualization support, add the `viz` extra:
+
+```bash
+pip install gpu-memory-profiler[torch,viz]
+```
+
+## PyTorch quick start
+
+<Steps>
+
+<Step title="Import the profiler">
+
+```python
+from gpumemprof import GPUMemoryProfiler
+import torch
+import torch.nn as nn
+
+# Initialize the profiler
+profiler = GPUMemoryProfiler(track_tensors=True)
+```
+
+</Step>
+
+<Step title="Profile your training step">
+
+Create a simple model and profile its training:
+
+```python
+# Define a simple model
+class SimpleModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(784, 128)
+        self.fc2 = nn.Linear(128, 10)
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        return self.fc2(x)
 
-### Step 2: Deploy your changes
+model = SimpleModel().cuda()
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+criterion = nn.CrossEntropyLoss()
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+# Profile a training step
+def train_step(model, data, target):
+    optimizer.zero_grad()
+    output = model(data)
+    loss = criterion(output, target)
+    loss.backward()
+    optimizer.step()
+    return loss.item()
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+# Create sample data
+data = torch.randn(32, 784).cuda()
+target = torch.randint(0, 10, (32,)).cuda()
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+# Profile the function
+profile = profiler.profile_function(train_step, model, data, target)
+print(f"Function: {profile.function_name}")
+```
 
-### Step 3: Go live
+</Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Step title="Use context manager for epochs">
+
+Profile entire training loops with context managers:
+
+```python
+for epoch in range(3):
+    with profiler.profile_context(f"epoch_{epoch+1}"):
+        loss = train_step(model, data, target)
+        print(f"Epoch {epoch+1} loss: {loss:.4f}")
+```
+
+</Step>
+
+<Step title="View the summary">
+
+Get detailed memory statistics:
+
+```python
+summary = profiler.get_summary()
+print(f"Peak memory: {summary['peak_memory_usage'] / (1024**3):.2f} GB")
+print(f"Average memory: {summary['average_memory_usage'] / (1024**3):.2f} GB")
+print(f"Total snapshots: {summary['total_snapshots']}")
+```
+
+</Step>
+
+</Steps>
+
+## TensorFlow quick start
+
+<Steps>
+
+<Step title="Import the profiler">
+
+```python
+import tensorflow as tf
+from tfmemprof import TFMemoryProfiler
+
+# Initialize the profiler
+profiler = TFMemoryProfiler(enable_tensor_tracking=True)
+```
+
+</Step>
+
+<Step title="Create and profile a model">
+
+Build a simple model and profile training:
+
+```python
+# Define a simple model
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(128, activation='relu', input_shape=(784,)),
+    tf.keras.layers.Dense(10, activation='softmax')
+])
+
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# Create sample data
+x_train = tf.random.normal((1000, 784))
+y_train = tf.random.uniform((1000,), minval=0, maxval=10, dtype=tf.int32)
+```
+
+</Step>
+
+<Step title="Profile with context manager">
+
+```python
+# Profile the training
+with profiler.profile_context("training"):
+    model.fit(x_train, y_train, epochs=3, batch_size=32, verbose=0)
+    print("Training complete!")
+```
+
+</Step>
+
+<Step title="View the results">
+
+```python
+results = profiler.get_results()
+print(f"Duration: {results.duration:.3f} seconds")
+print(f"Peak memory: {results.peak_memory_mb:.2f} MB")
+print(f"Average memory: {results.average_memory_mb:.2f} MB")
+print(f"Snapshots captured: {len(results.snapshots)}")
+```
+
+</Step>
+
+</Steps>
+
+## CLI usage
+
+GPU Memory Profiler includes powerful command-line tools for both frameworks.
+
+<Tabs>
+
+<Tab title="PyTorch CLI">
+
+### System information
+
+```bash
+gpumemprof info
+```
+
+### Real-time monitoring
+
+Monitor GPU memory usage in real-time:
+
+```bash
+# Monitor for 30 seconds with 0.5s interval
+gpumemprof monitor --duration 30 --interval 0.5
+
+# Monitor and save to file
+gpumemprof monitor --duration 30 --output memory_log.csv
+```
+
+### Diagnose issues
+
+Run diagnostics to identify memory problems:
+
+```bash
+gpumemprof diagnose
+```
+
+### Export data
+
+```bash
+# Export to CSV
+gpumemprof monitor --duration 10 --format csv --output metrics.csv
+
+# Export to JSON
+gpumemprof monitor --duration 10 --format json --output metrics.json
+```
+
+</Tab>
+
+<Tab title="TensorFlow CLI">
+
+### System information
+
+```bash
+tfmemprof info
+```
+
+### Monitor training
+
+```bash
+# Monitor with custom interval
+tfmemprof monitor --duration 30 --interval 1.0
+
+# Save monitoring data
+tfmemprof monitor --output tf_memory.csv
+```
+
+### Profile a script
+
+```bash
+tfmemprof profile my_training_script.py
+```
+
+</Tab>
+
+</Tabs>
+
+## Interactive terminal UI
+
+Launch the interactive dashboard for real-time monitoring:
+
+```bash
+# Install TUI dependencies
+pip install gpu-memory-profiler[tui]
+
+# Launch the dashboard
+gpu-profiler
+```
+
+The TUI provides:
+- Live GPU memory monitoring
+- PyTorch and TensorFlow quick actions
+- Visualizations and charts
+- Export functionality
+- CLI command execution
+
+<Info>
+  The terminal UI includes tabs for Overview, PyTorch, TensorFlow, Monitoring, Visualizations, and CLI actions.
+</Info>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
+<Card
+  title="Core concepts"
+  icon="book"
+  href="/concepts/profiling"
+>
+  Learn about profilers, trackers, and context managers
 </Card>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
+<Card
+  title="API reference"
+  icon="code"
+  href="/api/pytorch/profiler"
+>
+  Explore the complete Python API documentation
 </Card>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
+<Card
+  title="Leak detection"
+  icon="triangle-exclamation"
+  href="/examples/leak-detection"
+>
+  Detect and prevent memory leaks in your models
 </Card>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
+<Card
+  title="Visualizations"
+  icon="chart-line"
+  href="/guides/visualization"
+>
+  Create timeline plots, heatmaps, and dashboards
 </Card>
 
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

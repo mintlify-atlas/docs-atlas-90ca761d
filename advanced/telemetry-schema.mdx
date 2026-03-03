@@ -1,0 +1,321 @@
+---
+title: Telemetry schema
+description: TelemetryEvent v2 canonical event format for tracker exports
+---
+
+`TelemetryEvent v2` is the canonical event format for tracker exports.
+
+<Info>
+Schema file: `docs/schemas/telemetry_event_v2.schema.json`
+</Info>
+
+## Required fields
+
+All v2 telemetry events must include the following fields:
+
+- `schema_version` (must be `2`)
+- `timestamp_ns` - Timestamp in nanoseconds
+- `event_type` - Type of event (e.g., "sample", "checkpoint")
+- `collector` - Collector identifier
+- `sampling_interval_ms` - Sampling interval in milliseconds
+- `pid` - Process ID
+- `host` - Hostname
+- `device_id` - Device identifier
+- `allocator_allocated_bytes` - Bytes allocated by the allocator
+- `allocator_reserved_bytes` - Bytes reserved by the allocator
+- `allocator_active_bytes` - Active bytes (nullable)
+- `allocator_inactive_bytes` - Inactive bytes (nullable)
+- `allocator_change_bytes` - Change in allocation
+- `device_used_bytes` - Bytes used on device
+- `device_free_bytes` - Free bytes on device (nullable)
+- `device_total_bytes` - Total bytes on device (nullable)
+- `context` - Context information (nullable)
+- `metadata` - Additional metadata (must be a JSON object)
+
+<Warning>
+`TelemetryEvent v2` validation is strict:
+- Unknown top-level fields are rejected
+- `metadata` must be a JSON object (dict in Python)
+</Warning>
+
+## Collector values
+
+The following collector identifiers are used:
+
+- `gpumemprof.cuda_tracker` - CUDA device tracker
+- `gpumemprof.rocm_tracker` - ROCm device tracker
+- `gpumemprof.mps_tracker` - Apple MPS tracker
+- `gpumemprof.cpu_tracker` - CPU fallback tracker
+- `tfmemprof.memory_tracker` - TensorFlow memory tracker
+
+## Backend capability metadata
+
+Tracker exports may include backend capability hints under `metadata`:
+
+- `backend` - Backend type (e.g., "cuda", "rocm", "mps", "cpu")
+- `supports_device_total` - Whether total device memory is available
+- `supports_device_free` - Whether free device memory is available
+- `sampling_source` - Source of memory samples
+
+## JSON schema definition
+
+<CodeGroup>
+
+```json Schema
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TelemetryEvent v2",
+  "description": "Canonical telemetry event emitted by tracker/export paths.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "timestamp_ns",
+    "event_type",
+    "collector",
+    "sampling_interval_ms",
+    "pid",
+    "host",
+    "device_id",
+    "allocator_allocated_bytes",
+    "allocator_reserved_bytes",
+    "allocator_active_bytes",
+    "allocator_inactive_bytes",
+    "allocator_change_bytes",
+    "device_used_bytes",
+    "device_free_bytes",
+    "device_total_bytes",
+    "context",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "timestamp_ns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "event_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "collector": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sampling_interval_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": -1
+    },
+    "host": {
+      "type": "string",
+      "minLength": 1
+    },
+    "device_id": {
+      "type": "integer"
+    },
+    "allocator_allocated_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "allocator_reserved_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "allocator_active_bytes": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "allocator_inactive_bytes": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "allocator_change_bytes": {
+      "type": "integer"
+    },
+    "device_used_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "device_free_bytes": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "device_total_bytes": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "context": {
+      "type": ["string", "null"]
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+## Legacy v1 to v2 conversion
+
+Conversion is permissive by default in `gpumemprof.telemetry.telemetry_event_from_record`. Legacy conversion is attempted only when `schema_version` is absent.
+
+### Version handling
+
+If `schema_version` is present:
+- It must be an integer
+- It must be exactly `2`
+- Any other value is rejected (no legacy fallback)
+
+### Default values for legacy records
+
+When converting legacy records (without `schema_version`), the following defaults are applied:
+
+| Field | Default Value |
+|-------|---------------|
+| `pid` | `-1` (if missing) |
+| `host` | `"unknown"` (if missing) |
+| `device_id` | Inferred from `device` if possible, otherwise `-1` |
+| `allocator_reserved_bytes` | `allocator_allocated_bytes` |
+| `allocator_change_bytes` | `0` |
+| `device_used_bytes` | `allocator_allocated_bytes` |
+| `device_total_bytes` | `null` (if missing) |
+| `device_free_bytes` | `null` (if missing) |
+| `event_type` | `type` field if present, else `"sample"` |
+| `metadata` | Legacy `metadata_*` fields folded into v2 `metadata` object |
+
+<Note>
+If a legacy record is missing a valid timestamp, conversion fails.
+</Note>
+
+## Python API
+
+Use the public conversion/validation helpers in `gpumemprof.telemetry`:
+
+```python
+from gpumemprof.telemetry import (
+    load_telemetry_events,
+    telemetry_event_from_record,
+    telemetry_event_to_dict,
+    validate_telemetry_record,
+)
+```
+
+### Loading events from JSON
+
+```python
+events = load_telemetry_events(
+    path="tracker_export.json",
+    permissive_legacy=True,
+    events_key=None  # Auto-detect events location
+)
+```
+
+**Parameters:**
+- `path` - Path to JSON file containing telemetry events
+- `permissive_legacy` - Allow legacy record conversion (default: `True`)
+- `events_key` - Optional key for events in JSON object (auto-detected if `None`)
+
+### Converting individual records
+
+```python
+event = telemetry_event_from_record(
+    record=raw_record,
+    permissive_legacy=True,
+    default_collector="legacy.unknown",
+    default_sampling_interval_ms=0
+)
+```
+
+### Validating records
+
+```python
+try:
+    validate_telemetry_record(record)
+    print("Record is valid")
+except ValueError as e:
+    print(f"Validation error: {e}")
+```
+
+### Serializing events
+
+```python
+event = TelemetryEventV2(...)
+record_dict = telemetry_event_to_dict(event)
+```
+
+## Example usage
+
+<CodeGroup>
+
+```python Load and validate
+from gpumemprof.telemetry import load_telemetry_events
+
+# Load events from tracker export
+events = load_telemetry_events("memory_profile.json")
+
+for event in events:
+    print(f"Timestamp: {event.timestamp_ns}")
+    print(f"Collector: {event.collector}")
+    print(f"Allocated: {event.allocator_allocated_bytes / (1024**2):.2f} MB")
+    print(f"Metadata: {event.metadata}")
+    print()
+```
+
+```python Convert legacy record
+from gpumemprof.telemetry import telemetry_event_from_record
+
+# Legacy record format
+legacy_record = {
+    "timestamp": 1234567890.123,
+    "memory_allocated": 1024 * 1024 * 100,  # 100 MB
+    "device": "cuda:0",
+    "metadata_backend": "cuda"
+}
+
+# Convert to v2
+event = telemetry_event_from_record(legacy_record)
+print(f"Schema version: {event.schema_version}")  # 2
+print(f"Allocated: {event.allocator_allocated_bytes}")
+print(f"Backend: {event.metadata.get('backend')}")
+```
+
+```python Create new event
+from gpumemprof.telemetry import TelemetryEventV2
+import time
+
+event = TelemetryEventV2(
+    schema_version=2,
+    timestamp_ns=int(time.time() * 1_000_000_000),
+    event_type="sample",
+    collector="gpumemprof.cuda_tracker",
+    sampling_interval_ms=100,
+    pid=12345,
+    host="workstation",
+    device_id=0,
+    allocator_allocated_bytes=1024 * 1024 * 100,
+    allocator_reserved_bytes=1024 * 1024 * 120,
+    allocator_active_bytes=None,
+    allocator_inactive_bytes=None,
+    allocator_change_bytes=1024 * 1024 * 10,
+    device_used_bytes=1024 * 1024 * 100,
+    device_free_bytes=1024 * 1024 * 900,
+    device_total_bytes=1024 * 1024 * 1000,
+    context="training_step",
+    metadata={"backend": "cuda", "supports_device_total": True}
+)
+```
+
+</CodeGroup>
+
+## See also
+
+- [Architecture](/advanced/architecture) - System architecture overview
+- [Compatibility](/advanced/compatibility) - Framework and platform compatibility

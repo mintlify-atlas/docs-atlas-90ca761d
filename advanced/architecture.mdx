@@ -1,0 +1,443 @@
+---
+title: Architecture
+description: Architecture and design principles of GPU Memory Profiler
+---
+
+This document describes the architecture and design principles of GPU Memory Profiler.
+
+## Overview
+
+GPU Memory Profiler is designed with a modular, extensible architecture that supports both PyTorch and TensorFlow while maintaining clean separation of concerns.
+
+## High-level architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    GPU Memory Profiler                      │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │   PyTorch   │  │ TensorFlow  │  │     CLI     │         │
+│  │  Profiler   │  │  Profiler   │  │   Tools     │         │
+│  │ (gpumemprof)│  │(tfmemprof)  │  │             │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
+├─────────────────────────────────────────────────────────────┤
+│                    Core Components                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │   Profiler  │  │  Tracker    │  │ Visualizer  │         │
+│  │             │  │             │  │             │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │  Analyzer   │  │   Utils     │  │   Context   │         │
+│  │             │  │             │  │  Profiler   │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
+├─────────────────────────────────────────────────────────────┤
+│                    Framework Layer                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │   PyTorch   │  │ TensorFlow  │  │    CPU      │         │
+│  │   Memory    │  │   Memory    │  │   Memory    │         │
+│  │  Interface  │  │  Interface  │  │  Interface  │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Core components
+
+### Profiler
+
+The main profiling engine that coordinates memory monitoring and data collection.
+
+**Responsibilities:**
+
+- Initialize profiling sessions
+- Coordinate data collection from framework layers
+- Manage profiling state and configuration
+- Provide high-level API for users
+
+**Key classes:**
+
+- `GPUMemoryProfiler` (PyTorch - `gpumemprof.profiler`)
+- `TFMemoryProfiler` (TensorFlow - `tfmemprof.profiler`)
+
+Refer to `profiler.py` in the respective package.
+
+### Tracker
+
+Real-time memory tracking with background monitoring capabilities.
+
+**Responsibilities:**
+
+- Continuous memory monitoring
+- Alert system for memory thresholds
+- Background data collection
+- Memory leak detection
+
+**Key classes:**
+
+- `MemoryTracker` (exported from both packages)
+- `TrackingEvent` (`gpumemprof`) / `TrackingResult` (`tfmemprof`)
+- `MemoryWatchdog` (internal - not re-exported from package `__init__`)
+
+Refer to `tracker.py` in the respective package.
+
+### Visualizer
+
+Data visualization and reporting capabilities.
+
+**Responsibilities:**
+
+- Generate memory timeline plots
+- Create heatmaps and charts
+- Interactive dashboards
+- Export visualizations
+
+**Key classes:**
+
+- `MemoryVisualizer` (requires `[viz]` extra; uses matplotlib, seaborn, plotly internally)
+
+Refer to `visualizer.py` in the respective package.
+
+### Analyzer
+
+Advanced analysis and optimization recommendations.
+
+**Responsibilities:**
+
+- Memory leak detection algorithms
+- Performance analysis
+- Optimization suggestions
+- Pattern recognition
+
+**Key classes:**
+
+- `MemoryAnalyzer`
+- `GapFinding` (hidden-memory gap analysis)
+
+Refer to `analyzer.py` in the respective package.
+
+### Context profiler
+
+Context-aware profiling with decorators and context managers.
+
+**Responsibilities:**
+
+- Function-level profiling
+- Context manager support
+- Decorator implementations
+- Scope-based memory tracking
+
+**Key classes/functions:**
+
+- `profile_function` (decorator)
+- `profile_context` (context manager)
+- `MemoryProfiler` / `ProfiledModule` (`gpumemprof`)
+- `TensorFlowProfiler` / `ProfiledLayer` (`tfmemprof`)
+
+Refer to `context_profiler.py` in the respective package.
+
+### Utils
+
+Utility functions and system information gathering.
+
+**Responsibilities:**
+
+- System information collection
+- Memory formatting
+- Framework detection
+- Error handling
+
+**Key functions:**
+
+- `get_gpu_info()` (`gpumemprof`) / `get_system_info()` (`tfmemprof`)
+- `format_bytes()`, `convert_bytes()`
+- `detect_torch_runtime_backend()` (`gpumemprof`)
+
+Refer to `utils.py` in the respective package.
+
+### CLI
+
+Command-line interface for standalone usage.
+
+**Responsibilities:**
+
+- Command-line argument parsing
+- Real-time monitoring interface
+- Data export and analysis
+- System information display
+
+**Key commands:**
+
+- `info` - System information
+- `monitor` - Real-time monitoring
+- `track` - Background tracking
+- `analyze` - Results analysis
+- `diagnose` - Diagnostic bundle generation
+
+Refer to `cli.py` in the respective package.
+
+### OOM flight recorder
+
+Captures memory state before out-of-memory crashes for post-mortem analysis.
+
+**Key classes:**
+
+- `OOMFlightRecorder`
+- `OOMFlightRecorderConfig`
+- `OOMExceptionClassification`
+
+Refer to `oom_flight_recorder.py` in `gpumemprof`.
+
+### Device collectors
+
+Backend-aware device memory sampling across CUDA, ROCm, and MPS.
+
+**Key classes:**
+
+- `DeviceMemoryCollector` (abstract base)
+- `CudaDeviceCollector`, `ROCmDeviceCollector`, `MPSDeviceCollector`
+- `DeviceMemorySample`
+
+Refer to `device_collectors.py` in `gpumemprof`.
+
+### Telemetry
+
+Structured telemetry event schema for profiling data interchange.
+
+**Key classes:**
+
+- `TelemetryEventV2`
+
+Refer to `telemetry.py` in `gpumemprof` and the [telemetry schema documentation](/advanced/telemetry-schema).
+
+## Framework-specific architecture
+
+### PyTorch profiler
+
+```
+┌─────────────────────────────────────────┐
+│              gpumemprof                 │
+├─────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐      │
+│  │   Profiler  │  │  Context    │      │
+│  │             │  │  Profiler   │      │
+│  └─────────────┘  └─────────────┘      │
+│  ┌─────────────┐  ┌─────────────┐      │
+│  │   Tracker   │  │ Visualizer  │      │
+│  │             │  │             │      │
+│  └─────────────┘  └─────────────┘      │
+│  ┌─────────────┐  ┌─────────────┐      │
+│  │  Analyzer   │  │    Utils    │      │
+│  │             │  │             │      │
+│  └─────────────┘  └─────────────┘      │
+├─────────────────────────────────────────┤
+│              PyTorch Layer              │
+│  ┌─────────────┐  ┌─────────────┐      │
+│  │ torch.cuda  │  │   Memory    │      │
+│  │   Memory    │  │  Allocator  │      │
+│  └─────────────┘  └─────────────┘      │
+└─────────────────────────────────────────┘
+```
+
+**PyTorch-specific features:**
+
+- Tensor lifecycle tracking
+- CUDA memory management integration
+- PyTorch-specific optimizations
+- Autograd memory profiling
+
+### TensorFlow profiler
+
+```
+┌─────────────────────────────────────────┐
+│              tfmemprof                  │
+├─────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐      │
+│  │   Profiler  │  │  Context    │      │
+│  │             │  │  Profiler   │      │
+│  └─────────────┘  └─────────────┘      │
+│  ┌─────────────┐  ┌─────────────┐      │
+│  │   Tracker   │  │ Visualizer  │      │
+│  │             │  │             │      │
+│  └─────────────┘  └─────────────┘      │
+│  ┌─────────────┐  ┌─────────────┐      │
+│  │  Analyzer   │  │    Utils    │      │
+│  │             │  │             │      │
+│  └─────────────┘  └─────────────┘      │
+├─────────────────────────────────────────┤
+│            TensorFlow Layer             │
+│  ┌─────────────┐  ┌─────────────┐      │
+│  │   Session   │  │   Graph     │      │
+│  │  Memory     │  │ Execution   │      │
+│  └─────────────┘  └─────────────┘      │
+└─────────────────────────────────────────┘
+```
+
+**TensorFlow-specific features:**
+
+- Session-based memory tracking
+- Graph execution monitoring
+- Keras model profiling
+- Mixed precision support
+
+## Data flow
+
+### Initialization flow
+
+```
+User Code → Profiler Init → Framework Detection → System Info → Ready
+```
+
+### Profiling flow
+
+```
+User Code → Context/Decorator → Memory Snapshot → Data Collection → Analysis
+```
+
+### Monitoring flow
+
+```
+Background Thread → Memory Sampling → Alert Check → Data Storage → Visualization
+```
+
+### Analysis flow
+
+```
+Collected Data → Pattern Detection → Leak Analysis → Optimization Suggestions → Reports
+```
+
+## Design principles
+
+### Modularity
+
+Each component has a single responsibility and can be used independently:
+
+```python
+# Use only the profiler
+from gpumemprof import GPUMemoryProfiler
+profiler = GPUMemoryProfiler()
+
+# Use only the tracker
+from gpumemprof import MemoryTracker
+tracker = MemoryTracker()
+
+# Use only the visualizer
+from gpumemprof import MemoryVisualizer
+visualizer = MemoryVisualizer()
+```
+
+### Extensibility
+
+The architecture supports easy extension through the device-collector abstraction:
+
+```python
+from gpumemprof.device_collectors import DeviceMemoryCollector, DeviceMemorySample
+
+class NewBackendCollector(DeviceMemoryCollector):
+    def collect(self) -> DeviceMemorySample:
+        # Backend-specific memory sampling
+        pass
+```
+
+### Thread safety
+
+All components are designed to be thread-safe for concurrent usage:
+
+```python
+# Safe to use in multi-threaded environments
+profiler = GPUMemoryProfiler()
+profiler.start_monitoring()  # Background thread
+# Main thread continues...
+```
+
+### Performance
+
+Minimal overhead design with configurable sampling:
+
+```python
+# Low overhead mode
+profiler = GPUMemoryProfiler()
+profiler.start_monitoring(interval=5.0)
+
+# High precision mode
+profiler = GPUMemoryProfiler()
+profiler.start_monitoring(interval=0.1)
+```
+
+## Configuration management
+
+Configuration is handled through constructor arguments and CLI flags. There is no external configuration file or environment variable interface at this time.
+
+## Error handling
+
+### Graceful degradation
+
+```python
+try:
+    profiler = GPUMemoryProfiler()
+except CUDAError:
+    # Fall back to CPU mode
+    from gpumemprof import CPUMemoryProfiler
+    profiler = CPUMemoryProfiler()
+```
+
+## Testing architecture
+
+### Test structure
+
+Tests live in a flat `tests/` directory with framework-specific prefixes:
+
+```
+tests/
+├── test_profiler.py             # Core PyTorch profiler
+├── test_core_profiler.py        # Profiler integration
+├── test_cpu_profiler.py         # CPU-only profiler
+├── test_device_collectors.py    # Backend collectors
+├── test_gap_analysis.py         # PyTorch gap analysis
+├── test_oom_flight_recorder.py  # OOM recorder
+├── test_telemetry_v2.py         # Telemetry schema
+├── test_cli_info.py             # CLI info command
+├── test_cli_diagnose.py         # CLI diagnose command
+├── test_tf_*.py                 # TensorFlow-specific tests
+├── test_utils.py                # Utility tests
+├── test_benchmark_harness.py    # Performance budgets
+├── test_docs_regressions.py     # Doc drift guard
+├── tui/                         # TUI snapshot & pilot tests
+└── e2e/                         # End-to-end tests
+```
+
+**Pytest markers** (defined in `pyproject.toml`): `unit`, `integration`, `slow`, `tui_pilot`, `tui_pty`, `tui_snapshot`.
+
+### Mock strategy
+
+```python
+# Mock CUDA for testing
+@pytest.fixture
+def mock_cuda():
+    with patch('torch.cuda.is_available', return_value=True):
+        yield
+```
+
+## Future extensibility
+
+### Plugin system
+
+```python
+class ProfilerPlugin:
+    def on_memory_snapshot(self, snapshot):
+        pass
+
+    def on_leak_detected(self, leak):
+        pass
+```
+
+### Custom visualizations
+
+```python
+class CustomVisualizer(MemoryVisualizer):
+    def create_custom_plot(self, data):
+        # Custom visualization logic
+        pass
+```
+
+### Framework support
+
+New frameworks can implement a `DeviceMemoryCollector` and integrate with the existing profiling pipeline.

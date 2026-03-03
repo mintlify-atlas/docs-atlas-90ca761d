@@ -1,0 +1,307 @@
+---
+title: Analyzer
+description: Advanced TensorFlow memory analysis and optimization detection
+---
+
+## MemoryAnalyzer
+
+Advanced TensorFlow memory analysis for detecting leaks, fragmentation, and optimization opportunities.
+
+### Constructor
+
+```python
+MemoryAnalyzer(sensitivity: float = 0.05)
+```
+
+<ParamField path="sensitivity" type="float" default="0.05">
+  Analysis sensitivity threshold (0.0-1.0). Lower values detect smaller anomalies
+</ParamField>
+
+### Methods
+
+#### detect_memory_leaks
+
+Detect potential memory leaks using statistical analysis.
+
+```python
+def detect_memory_leaks(self, tracking_results: TrackingResult) -> List[Dict[str, Any]]
+```
+
+<ParamField path="tracking_results" type="TrackingResult">
+  Results from MemoryTracker
+</ParamField>
+
+<ResponseField name="List[Dict]" type="List[Dict[str, Any]]">
+  List of detected leaks with type, severity, and description
+  
+  <ResponseField name="type" type="str">
+    Leak type: 'monotonic_increase', 'memory_spikes', or 'insufficient_cleanup'
+  </ResponseField>
+  
+  <ResponseField name="severity" type="str">
+    Severity level: 'high', 'medium', or 'low'
+  </ResponseField>
+  
+  <ResponseField name="description" type="str">
+    Human-readable description
+  </ResponseField>
+</ResponseField>
+
+**Example:**
+
+```python
+analyzer = MemoryAnalyzer(sensitivity=0.05)
+leaks = analyzer.detect_memory_leaks(tracking_results)
+
+for leak in leaks:
+    print(f"{leak['severity'].upper()}: {leak['description']}")
+```
+
+#### analyze_fragmentation
+
+Analyze memory fragmentation patterns.
+
+```python
+def analyze_fragmentation(self, profile_result: ProfileResult) -> Dict[str, float]
+```
+
+<ParamField path="profile_result" type="ProfileResult">
+  Results from TFMemoryProfiler
+</ParamField>
+
+<ResponseField name="Dict[str, float]" type="Dict[str, float]">
+  <ResponseField name="fragmentation_score" type="float">
+    Overall fragmentation score (0.0-1.0)
+  </ResponseField>
+  
+  <ResponseField name="trend" type="float">
+    Fragmentation trend (positive = increasing)
+  </ResponseField>
+  
+  <ResponseField name="max_fragmentation" type="float">
+    Maximum fragmentation observed
+  </ResponseField>
+  
+  <ResponseField name="min_fragmentation" type="float">
+    Minimum fragmentation observed
+  </ResponseField>
+</ResponseField>
+
+#### detect_patterns
+
+Detect memory usage patterns.
+
+```python
+def detect_patterns(self, tracking_results: TrackingResult) -> List[Dict[str, Any]]
+```
+
+<ParamField path="tracking_results" type="TrackingResult">
+  Results from MemoryTracker
+</ParamField>
+
+<ResponseField name="List[Dict]" type="List[Dict[str, Any]]">
+  Detected patterns including 'periodic_pattern' and 'step_pattern' types
+</ResponseField>
+
+**Example:**
+
+```python
+patterns = analyzer.detect_patterns(tracking_results)
+
+for pattern in patterns:
+    print(f"Pattern: {pattern['type']} - {pattern['description']}")
+```
+
+#### analyze_efficiency
+
+Analyze memory usage efficiency.
+
+```python
+def analyze_efficiency(self, profile_result: ProfileResult) -> float
+```
+
+<ParamField path="profile_result" type="ProfileResult">
+  Results from TFMemoryProfiler
+</ParamField>
+
+<ResponseField name="float" type="float">
+  Efficiency score from 0-10 (higher is better)
+</ResponseField>
+
+#### correlate_with_performance
+
+Correlate memory usage with performance metrics.
+
+```python
+def correlate_with_performance(self, profile_result: ProfileResult) -> Dict[str, Any]
+```
+
+<ParamField path="profile_result" type="ProfileResult">
+  Results from TFMemoryProfiler
+</ParamField>
+
+<ResponseField name="Dict[str, Any]" type="Dict[str, Any]">
+  <ResponseField name="memory_duration_correlation" type="float">
+    Correlation between memory and duration
+  </ResponseField>
+  
+  <ResponseField name="function_efficiency" type="Dict[str, Dict]">
+    Per-function efficiency metrics
+  </ResponseField>
+  
+  <ResponseField name="recommendations" type="List[str]">
+    Performance optimization recommendations
+  </ResponseField>
+</ResponseField>
+
+#### analyze_memory_gaps
+
+Classify allocator-vs-device hidden memory gaps over time.
+
+```python
+def analyze_memory_gaps(self, events: List[TelemetryEventV2]) -> List[GapFinding]
+```
+
+<ParamField path="events" type="List[TelemetryEventV2]">
+  Chronologically ordered telemetry samples
+</ParamField>
+
+<ResponseField name="List[GapFinding]" type="List[GapFinding]">
+  Prioritized list of gap findings sorted by severity and confidence
+</ResponseField>
+
+**Example:**
+
+```python
+events = tracker.get_tracking_results().events
+gaps = analyzer.analyze_memory_gaps(events)
+
+for gap in gaps:
+    print(f"Severity: {gap.severity}")
+    print(f"Classification: {gap.classification}")
+    print(f"Description: {gap.description}")
+```
+
+#### score_optimization
+
+Score optimization opportunities across multiple dimensions.
+
+```python
+def score_optimization(
+    self,
+    profile_result: ProfileResult,
+    events: Optional[List[TelemetryEventV2]] = None
+) -> Dict[str, Any]
+```
+
+<ParamField path="profile_result" type="ProfileResult">
+  TensorFlow profiling result object
+</ParamField>
+
+<ParamField path="events" type="List[TelemetryEventV2]" optional>
+  Optional telemetry event series for gap analysis. When provided, result includes gap_analysis section
+</ParamField>
+
+<ResponseField name="Dict[str, Any]" type="Dict[str, Any]">
+  <ResponseField name="overall_score" type="float">
+    Overall optimization score (0-10)
+  </ResponseField>
+  
+  <ResponseField name="categories" type="Dict[str, float]">
+    Category-specific scores (memory_efficiency, fragmentation, performance)
+  </ResponseField>
+  
+  <ResponseField name="top_recommendations" type="List[str]">
+    Top optimization suggestions
+  </ResponseField>
+  
+  <ResponseField name="priority_actions" type="List[str]">
+    Priority actions to take
+  </ResponseField>
+  
+  <ResponseField name="gap_analysis" type="List[Dict]" optional>
+    Hidden memory gap findings (when events provided)
+  </ResponseField>
+</ResponseField>
+
+## Configuration
+
+The analyzer uses configurable thresholds for gap analysis:
+
+```python
+analyzer.thresholds = {
+    'gap_ratio_threshold': 0.05,      # 5% of device total
+    'gap_spike_zscore': 2.0,          # z-score for spike detection
+    'gap_drift_r_squared': 0.6,       # R-squared for drift
+    'gap_fragmentation_ratio': 0.3,   # fragmentation threshold
+}
+```
+
+## Example
+
+```python
+from tfmemprof.analyzer import MemoryAnalyzer
+from tfmemprof.profiler import TFMemoryProfiler
+from tfmemprof.tracker import MemoryTracker
+
+# Run profiling and tracking
+profiler = TFMemoryProfiler()
+tracker = MemoryTracker(sampling_interval=0.5)
+
+tracker.start_tracking()
+
+with profiler.profile_context("training"):
+    model.fit(x_train, y_train, epochs=5)
+
+tracking_results = tracker.stop_tracking()
+profile_results = profiler.get_results()
+
+# Analyze results
+analyzer = MemoryAnalyzer(sensitivity=0.05)
+
+# Detect memory leaks
+leaks = analyzer.detect_memory_leaks(tracking_results)
+if leaks:
+    print("\nMemory Leaks Detected:")
+    for leak in leaks:
+        print(f"  [{leak['severity']}] {leak['description']}")
+
+# Analyze fragmentation
+frag = analyzer.analyze_fragmentation(profile_results)
+print(f"\nFragmentation Score: {frag['fragmentation_score']:.3f}")
+print(f"Trend: {'increasing' if frag['trend'] > 0 else 'decreasing'}")
+
+# Detect patterns
+patterns = analyzer.detect_patterns(tracking_results)
+for pattern in patterns:
+    print(f"\nPattern: {pattern['type']}")
+    print(f"  {pattern['description']}")
+
+# Get efficiency score
+efficiency = analyzer.analyze_efficiency(profile_results)
+print(f"\nMemory Efficiency: {efficiency:.1f}/10")
+
+# Performance correlation
+perf = analyzer.correlate_with_performance(profile_results)
+print("\nPerformance Recommendations:")
+for rec in perf['recommendations']:
+    print(f"  - {rec}")
+
+# Comprehensive optimization scoring
+events = tracking_results.events
+opt_score = analyzer.score_optimization(profile_results, events=events)
+
+print(f"\nOptimization Score: {opt_score['overall_score']:.1f}/10")
+print("\nCategory Scores:")
+for cat, score in opt_score['categories'].items():
+    print(f"  {cat}: {score:.1f}/10")
+
+print("\nPriority Actions:")
+for action in opt_score['priority_actions']:
+    print(f"  - {action}")
+
+if 'gap_analysis' in opt_score:
+    print("\nHidden Memory Gaps:")
+    for gap in opt_score['gap_analysis']:
+        print(f"  [{gap['severity']}] {gap['description']}")
+```

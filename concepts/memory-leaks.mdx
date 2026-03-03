@@ -1,0 +1,399 @@
+---
+title: Memory leak detection
+description: Detect, analyze, and diagnose GPU memory leaks using the MemoryAnalyzer
+---
+
+## Overview
+
+Memory leaks occur when GPU memory is allocated but never freed, causing memory usage to grow over time. The `MemoryAnalyzer` class automatically detects memory leak patterns by analyzing profiling data and identifying functions with consistent memory growth.
+
+## How leak detection works
+
+The analyzer examines profiling results to detect several leak indicators:
+
+1. **Consistent memory growth** - Functions that repeatedly allocate more than they free
+2. **Positive growth ratio** - Percentage of calls where memory increases
+3. **Significant total growth** - Absolute memory growth exceeds threshold (100MB+)
+4. **Temporal trends** - Upward trend in memory usage over time
+
+A function is flagged as a potential leak when:
+- Average memory growth per call > 0
+- More than 10% of calls show positive memory growth
+- Total memory growth exceeds 100MB
+
+See `analyzer.py:116-163` for the leak detection implementation.
+
+## Basic leak detection
+
+### Analyzing profiling results
+
+```python
+from gpumemprof import GPUMemoryProfiler, MemoryAnalyzer
+import torch
+
+profiler = GPUMemoryProfiler()
+
+# Profile your code
+for i in range(100):
+    result = profiler.profile_function(training_step, model, data)
+
+# Analyze for memory patterns
+analyzer = MemoryAnalyzer(profiler)
+patterns = analyzer.analyze_memory_patterns()
+
+# Check for leaks
+leaks = [p for p in patterns if p.pattern_type == 'memory_leak']
+
+for leak in leaks:
+    print(f"Severity: {leak.severity}")
+    print(f"Description: {leak.description}")
+    print(f"Affected functions: {leak.affected_functions}")
+    print(f"Total growth: {leak.metrics['total_memory_growth'] / 1024**2:.2f} MB")
+    print(f"Suggestions:")
+    for suggestion in leak.suggestions:
+        print(f"  - {suggestion}")
+```
+
+### Leak pattern structure
+
+Each `MemoryPattern` contains detailed diagnostic information:
+
+```python
+leak_pattern = MemoryPattern(
+    pattern_type='memory_leak',
+    description="Function 'train_step' shows potential memory leak pattern",
+    severity='critical',  # or 'warning'
+    affected_functions=['train_step', 'forward_pass'],
+    metrics={
+        'total_memory_growth': 2147483648,  # 2GB total growth
+        'average_growth_per_call': 21474836,  # ~20MB per call
+        'positive_growth_ratio': 0.95,  # 95% of calls grew memory
+        'call_count': 100
+    },
+    suggestions=[
+        "Review memory management in 'train_step'",
+        "Check for uncleaned tensors or variables",
+        "Use torch.cuda.empty_cache() if appropriate",
+        "Consider using context managers for tensor lifecycle"
+    ]
+)
+```
+
+## Leak severity levels
+
+Leaks are classified by severity:
+
+**Critical** (total growth > 1GB):
+- Immediate action required
+- Can cause OOM errors quickly
+- Often indicates missing `.detach()` or accumulating gradients
+
+**Warning** (100MB - 1GB):
+- Should be investigated
+- May cause issues in long-running processes
+- Often fixable with periodic cleanup
+
+## Common leak patterns
+
+### Gradient accumulation leak
+
+```python
+# LEAK: Gradients accumulate in computation graph
+for i in range(1000):
+    output = model(data)
+    loss = output.sum()
+    loss.backward()  # Graph keeps growing
+
+# FIX: Detach from graph or use no_grad
+for i in range(1000):
+    output = model(data)
+    loss = output.sum()
+    loss.backward()
+    loss = loss.detach()  # Break graph connection
+```
+
+### Hidden reference leak
+
+```python
+# LEAK: List accumulates tensors
+results = []
+for batch in dataloader:
+    output = model(batch)
+    results.append(output)  # Keeps tensors in memory
+
+# FIX: Extract values or clear periodically
+results = []
+for batch in dataloader:
+    output = model(batch)
+    results.append(output.item())  # Only store scalar
+    # or: results.append(output.detach().cpu())
+```
+
+### Cache leak
+
+```python
+# LEAK: Cache grows unbounded
+cache = {}
+def cached_forward(x):
+    key = x.shape
+    if key not in cache:
+        cache[key] = expensive_operation(x)
+    return cache[key]
+
+# FIX: Use bounded cache
+from functools import lru_cache
+
+@lru_cache(maxsize=128)
+def cached_forward(shape_tuple):
+    return expensive_operation(shape_tuple)
+```
+
+## Temporal trend analysis
+
+The analyzer detects memory growth trends over time using linear regression:
+
+```python
+analyzer = MemoryAnalyzer(profiler)
+insights = analyzer.generate_performance_insights()
+
+temporal_insights = [i for i in insights if i.category == 'temporal']
+
+for insight in temporal_insights:
+    if 'growth_rate' in insight.data:
+        growth_mb_s = insight.data['growth_rate'] / 1024**2
+        print(f"Memory growing at {growth_mb_s:.2f} MB/s")
+        print(f"Correlation: {insight.data['correlation']:.3f}")
+        print(f"Statistical significance: p={insight.data['p_value']:.4f}")
+```
+
+A significant upward trend (p < 0.05, r > 0.5) indicates a potential leak. See `analyzer.py:564-608` for trend detection logic.
+
+## Analyzing specific functions
+
+Focus leak detection on specific functions:
+
+```python
+# Filter results for specific function
+train_results = [r for r in profiler.results if r.function_name == 'train_step']
+
+# Analyze just those results
+patterns = analyzer.analyze_memory_patterns(results=train_results)
+
+# Check memory trend
+memory_changes = [r.memory_diff() for r in train_results]
+print(f"Memory changes: {[m/1024**2 for m in memory_changes[:10]]} MB")
+print(f"Total growth: {sum(memory_changes)/1024**2:.2f} MB")
+```
+
+## Fragmentation vs leaks
+
+Not all memory growth is a leak. Distinguish between fragmentation and true leaks:
+
+**Fragmentation** (not a leak):
+- Reserved memory > allocated memory
+- Gap grows but then stabilizes
+- Occurs due to CUDA caching allocator
+- Fixed with `torch.cuda.empty_cache()`
+
+**True leak**:
+- Allocated memory consistently grows
+- Never stabilizes or plateaus
+- Persists even after `empty_cache()`
+- Requires code changes to fix
+
+```python
+patterns = analyzer.analyze_memory_patterns()
+
+leaks = [p for p in patterns if p.pattern_type == 'memory_leak']
+fragmentation = [p for p in patterns if p.pattern_type == 'fragmentation']
+
+print(f"Found {len(leaks)} potential leaks")
+print(f"Found {len(fragmentation)} fragmentation issues")
+```
+
+See `analyzer.py:165-210` for fragmentation detection.
+
+## Comprehensive leak diagnosis
+
+Generate a full optimization report including leak analysis:
+
+```python
+analyzer = MemoryAnalyzer(profiler)
+report = analyzer.generate_optimization_report()
+
+# Critical issues (includes critical leaks)
+for issue in report['critical_issues']:
+    print(f"CRITICAL: {issue['description']}")
+    print(f"Affected: {issue['affected_functions']}")
+    print(f"Metrics: {issue['metrics']}")
+
+# All detected patterns
+for pattern in report['all_patterns']:
+    if pattern['pattern_type'] == 'memory_leak':
+        print(f"\nLeak detected:")
+        print(f"  Severity: {pattern['severity']}")
+        print(f"  Functions: {pattern['affected_functions']}")
+        print(f"  Growth: {pattern['metrics']['total_memory_growth']/1024**3:.2f} GB")
+
+# Prioritized recommendations
+print("\nTop recommendations:")
+for rec in report['recommendations'][:5]:
+    print(f"[{rec['priority'].upper()}] {rec['description']}")
+    for suggestion in rec['suggestions']:
+        print(f"  • {suggestion}")
+
+# Overall score
+score = report['optimization_score']
+print(f"\nOptimization score: {score['score']}/100 ({score['grade']})")
+print(f"Description: {score['description']}")
+```
+
+See `analyzer.py:633-685` for report generation.
+
+## Leak detection thresholds
+
+Customize detection sensitivity by adjusting thresholds:
+
+```python
+analyzer = MemoryAnalyzer(profiler)
+
+# Adjust leak detection thresholds
+analyzer.thresholds['memory_leak_ratio'] = 0.05  # Default: 0.1 (10%)
+analyzer.thresholds['min_calls_for_analysis'] = 5  # Default: 3
+
+# More sensitive: Catch smaller leaks
+analyzer.thresholds['memory_leak_ratio'] = 0.05
+
+# Less sensitive: Only major leaks
+analyzer.thresholds['memory_leak_ratio'] = 0.2
+
+patterns = analyzer.analyze_memory_patterns()
+```
+
+Available thresholds:
+- `memory_leak_ratio`: Minimum positive growth ratio (default: 0.1)
+- `min_calls_for_analysis`: Minimum calls to consider (default: 3)
+- `fragmentation_ratio`: Fragmentation threshold (default: 0.3)
+- `inefficient_allocation_ratio`: Allocation efficiency threshold (default: 0.5)
+
+See `analyzer.py:73-86` for all thresholds.
+
+## Repeated allocation detection
+
+Identify functions with many small allocations that could be optimized:
+
+```python
+patterns = analyzer.analyze_memory_patterns()
+
+repeated = [p for p in patterns if p.pattern_type == 'repeated_allocations']
+
+for pattern in repeated:
+    print(f"Functions with frequent allocations:")
+    for func in pattern.affected_functions:
+        print(f"  - {func}")
+    print(f"Total memory impact: {pattern.metrics['total_memory_from_repeated']/1024**2:.2f} MB")
+    print(f"Suggestions:")
+    for s in pattern.suggestions:
+        print(f"  • {s}")
+```
+
+This detects functions called 10+ times with average allocation < 50MB, which may benefit from pre-allocation or batching. See `analyzer.py:320-375` for implementation.
+
+## Memory spike detection
+
+Distinguish between gradual leaks and sudden spikes:
+
+```python
+patterns = analyzer.analyze_memory_patterns()
+
+spikes = [p for p in patterns if p.pattern_type == 'memory_spikes']
+
+for spike in spikes:
+    print(f"Detected {spike.metrics['spike_count']} memory spikes")
+    print(f"Spike threshold: {spike.metrics['spike_threshold']/1024**2:.2f} MB")
+    print(f"Max allocation: {spike.metrics['max_allocation']/1024**2:.2f} MB")
+    print(f"Median allocation: {spike.metrics['median_allocation']/1024**2:.2f} MB")
+```
+
+Spikes are detected using IQR-based outlier detection (1.5 × IQR above Q3). See `analyzer.py:272-318` for spike detection.
+
+<Note>
+Spikes are different from leaks:
+- **Spikes**: Sudden large allocations (may be legitimate)
+- **Leaks**: Gradual consistent growth over time
+</Note>
+
+## Best practices
+
+<Tip>
+**Profile multiple iterations**: Run at least 50-100 iterations to detect gradual leaks. Short runs may miss slow leaks.
+</Tip>
+
+<Tip>
+**Check for stabilization**: Memory may grow initially during warmup (JIT compilation, cache building) then stabilize. This is normal.
+</Tip>
+
+<Tip>
+**Use detach() liberally**: Call `.detach()` on tensors when you don't need gradients to prevent graph accumulation.
+</Tip>
+
+<Warning>
+Some "leaks" are intentional caching (e.g., cuDNN benchmarking, CUDA context). Verify before "fixing".
+</Warning>
+
+## Debugging workflows
+
+### 1. Identify the leak
+
+```python
+analyzer = MemoryAnalyzer(profiler)
+patterns = analyzer.analyze_memory_patterns()
+leaks = [p for p in patterns if p.pattern_type == 'memory_leak']
+```
+
+### 2. Profile suspected function in isolation
+
+```python
+profiler.clear_results()
+for i in range(100):
+    profiler.profile_function(suspected_function, args)
+
+# Check if leak persists
+results = profiler.results
+memory_growth = [r.memory_diff() for r in results]
+print(f"Avg growth per call: {sum(memory_growth)/len(memory_growth)/1024**2:.2f} MB")
+```
+
+### 3. Enable stack traces
+
+```python
+profiler = GPUMemoryProfiler(collect_stack_traces=True)
+result = profiler.profile_function(suspected_function, args)
+print(result.memory_peak.stack_trace)  # See where allocation occurred
+```
+
+### 4. Use PyTorch memory profiler
+
+```python
+import torch
+
+with torch.cuda.profiler.profile():
+    with torch.profiler.record_function("suspected_operation"):
+        suspected_function()
+
+# Or use memory snapshot
+torch.cuda.memory._record_memory_history()
+suspected_function()
+torch.cuda.memory._dump_snapshot("memory_snapshot.pickle")
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Profiling" href="/concepts/profiling">
+    Learn about GPU memory profiling basics
+  </Card>
+  <Card title="OOM detection" href="/concepts/oom-detection">
+    Handle out-of-memory errors
+  </Card>
+</CardGroup>

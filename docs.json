@@ -1,122 +1,115 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "GPU Memory Profiler",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#E74C3C",
+    "light": "#3498DB",
+    "dark": "#2C3E50"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/Silas-Asamoah/stormlog"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/Silas-Asamoah/stormlog"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/profiling",
+              "concepts/tracking",
+              "concepts/memory-leaks",
+              "concepts/oom-detection"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/pytorch",
+              "guides/tensorflow",
+              "guides/cli-usage",
+              "guides/cpu-mode",
+              "guides/tui-dashboard",
+              "guides/visualization"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Examples",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "examples/basic-profiling",
+              "examples/context-managers",
+              "examples/leak-detection",
+              "examples/oom-recorder",
+              "examples/telemetry-export"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/architecture",
+              "advanced/telemetry-schema",
+              "advanced/compatibility",
+              "advanced/troubleshooting"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "PyTorch (gpumemprof)",
             "pages": [
-              "api-reference/introduction"
+              "api/pytorch/profiler",
+              "api/pytorch/tracker",
+              "api/pytorch/context-profiler",
+              "api/pytorch/cpu-profiler",
+              "api/pytorch/analyzer",
+              "api/pytorch/visualizer",
+              "api/pytorch/oom-recorder",
+              "api/pytorch/telemetry",
+              "api/pytorch/utils"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "TensorFlow (tfmemprof)",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/tensorflow/profiler",
+              "api/tensorflow/tracker",
+              "api/tensorflow/context-profiler",
+              "api/tensorflow/analyzer",
+              "api/tensorflow/visualizer",
+              "api/tensorflow/utils"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "api/cli/gpumemprof",
+              "api/cli/tfmemprof",
+              "api/cli/gpu-profiler"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

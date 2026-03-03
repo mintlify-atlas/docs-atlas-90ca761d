@@ -1,0 +1,412 @@
+---
+title: Telemetry
+description: Canonical telemetry event schema and conversion utilities
+---
+
+The `telemetry` module provides a standardized schema for memory profiling events and utilities for converting legacy formats.
+
+## Constants
+
+<ParamField path="SCHEMA_VERSION_V2" type="Literal[2]" default="2">
+  Current telemetry schema version
+</ParamField>
+
+<ParamField path="UNKNOWN_PID" type="int" default="-1">
+  Sentinel value for unknown process ID
+</ParamField>
+
+<ParamField path="UNKNOWN_HOST" type="str" default="'unknown'">
+  Sentinel value for unknown hostname
+</ParamField>
+
+## Classes
+
+### TelemetryEventV2
+
+Canonical telemetry event payload used by tracker exports.
+
+```python
+from gpumemprof.telemetry import TelemetryEventV2
+
+event = TelemetryEventV2(
+    schema_version=2,
+    timestamp_ns=1709481600000000000,
+    event_type="allocation",
+    collector="gpumemprof.cuda_tracker",
+    sampling_interval_ms=100,
+    pid=12345,
+    host="gpu-server-01",
+    device_id=0,
+    allocator_allocated_bytes=5368709120,
+    allocator_reserved_bytes=6442450944,
+    allocator_active_bytes=5100273664,
+    allocator_inactive_bytes=268435456,
+    allocator_change_bytes=134217728,
+    device_used_bytes=5500000000,
+    device_free_bytes=11000000000,
+    device_total_bytes=16500000000,
+    context="training_step",
+    metadata={"batch_size": 32, "epoch": 5}
+)
+```
+
+#### Attributes
+
+<ParamField path="schema_version" type="Literal[2]">
+  Schema version (always 2)
+</ParamField>
+
+<ParamField path="timestamp_ns" type="int">
+  Unix timestamp in nanoseconds
+</ParamField>
+
+<ParamField path="event_type" type="str">
+  Event type (e.g., "allocation", "deallocation", "peak", "warning")
+</ParamField>
+
+<ParamField path="collector" type="str">
+  Collector identifier (e.g., "gpumemprof.cuda_tracker")
+</ParamField>
+
+<ParamField path="sampling_interval_ms" type="int">
+  Sampling interval in milliseconds
+</ParamField>
+
+<ParamField path="pid" type="int">
+  Process ID
+</ParamField>
+
+<ParamField path="host" type="str">
+  Hostname
+</ParamField>
+
+<ParamField path="device_id" type="int">
+  Device ID (-1 for CPU)
+</ParamField>
+
+<ParamField path="allocator_allocated_bytes" type="int">
+  Bytes allocated by the memory allocator
+</ParamField>
+
+<ParamField path="allocator_reserved_bytes" type="int">
+  Bytes reserved by the memory allocator
+</ParamField>
+
+<ParamField path="allocator_active_bytes" type="Optional[int]">
+  Active bytes in the allocator
+</ParamField>
+
+<ParamField path="allocator_inactive_bytes" type="Optional[int]">
+  Inactive bytes in the allocator
+</ParamField>
+
+<ParamField path="allocator_change_bytes" type="int">
+  Memory change in bytes since last event
+</ParamField>
+
+<ParamField path="device_used_bytes" type="int">
+  Total device memory used
+</ParamField>
+
+<ParamField path="device_free_bytes" type="Optional[int]">
+  Free device memory
+</ParamField>
+
+<ParamField path="device_total_bytes" type="Optional[int]">
+  Total device memory
+</ParamField>
+
+<ParamField path="context" type="Optional[str]">
+  Contextual information
+</ParamField>
+
+<ParamField path="metadata" type="Dict[str, Any]" default="{}">
+  Additional metadata
+</ParamField>
+
+## Functions
+
+### telemetry_event_to_dict()
+
+Serialize a telemetry event to a plain dictionary.
+
+```python
+from gpumemprof.telemetry import telemetry_event_to_dict
+
+event_dict = telemetry_event_to_dict(event)
+# Returns dict with all event fields
+```
+
+<ParamField path="event" type="TelemetryEventV2">
+  Event to serialize
+</ParamField>
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Dictionary representation of the event
+</ResponseField>
+
+---
+
+### validate_telemetry_record()
+
+Validate a v2 telemetry record.
+
+```python
+from gpumemprof.telemetry import validate_telemetry_record
+
+record = {
+    "schema_version": 2,
+    "timestamp_ns": 1709481600000000000,
+    "event_type": "allocation",
+    # ... all required fields
+}
+
+try:
+    validate_telemetry_record(record)
+    print("Record is valid")
+except ValueError as e:
+    print(f"Validation error: {e}")
+```
+
+<ParamField path="record" type="Dict[str, Any]">
+  Record to validate
+</ParamField>
+
+Raises `ValueError` if the record is invalid or has missing fields.
+
+---
+
+### telemetry_event_from_record()
+
+Create a v2 telemetry event from v2 or legacy tracker records.
+
+```python
+from gpumemprof.telemetry import telemetry_event_from_record
+
+# From v2 record
+v2_record = {
+    "schema_version": 2,
+    "timestamp_ns": 1709481600000000000,
+    "event_type": "allocation",
+    # ... other fields
+}
+event = telemetry_event_from_record(v2_record)
+
+# From legacy record (auto-converted)
+legacy_record = {
+    "timestamp": 1709481600.0,
+    "memory_allocated": 5368709120,
+    "memory_reserved": 6442450944,
+    "device": "cuda:0"
+}
+event = telemetry_event_from_record(
+    legacy_record,
+    permissive_legacy=True,
+    default_collector="gpumemprof.cuda_tracker"
+)
+```
+
+<ParamField path="record" type="Dict[str, Any]">
+  Record to convert (v2 or legacy format)
+</ParamField>
+
+<ParamField path="permissive_legacy" type="bool" default="True">
+  Whether to allow legacy format conversion
+</ParamField>
+
+<ParamField path="default_collector" type="str" default="'legacy.unknown'">
+  Default collector name for legacy records
+</ParamField>
+
+<ParamField path="default_sampling_interval_ms" type="int" default="0">
+  Default sampling interval for legacy records
+</ParamField>
+
+<ResponseField name="return" type="TelemetryEventV2">
+  Normalized telemetry event
+</ResponseField>
+
+---
+
+### load_telemetry_events()
+
+Load telemetry events from JSON and normalize to v2 payloads.
+
+```python
+from gpumemprof.telemetry import load_telemetry_events
+
+# Load from file
+events = load_telemetry_events("memory_events.json")
+
+# With custom events key
+events = load_telemetry_events(
+    "export.json",
+    events_key="profiling_data"
+)
+
+# Strict mode (no legacy conversion)
+events = load_telemetry_events(
+    "v2_events.json",
+    permissive_legacy=False
+)
+
+print(f"Loaded {len(events)} events")
+for event in events[:5]:
+    print(f"  {event.event_type}: {event.allocator_allocated_bytes} bytes")
+```
+
+<ParamField path="path" type="Union[str, Path]">
+  Path to JSON file containing telemetry events
+</ParamField>
+
+<ParamField path="permissive_legacy" type="bool" default="True">
+  Whether to allow legacy format conversion
+</ParamField>
+
+<ParamField path="events_key" type="Optional[str]" default="None">
+  JSON key containing the events array (auto-detects if None)
+</ParamField>
+
+<ResponseField name="return" type="List[TelemetryEventV2]">
+  List of normalized telemetry events
+</ResponseField>
+
+Supported JSON formats:
+- Array of events: `[{event1}, {event2}, ...]`
+- Object with events key: `{"events": [{event1}, {event2}]}`
+- Single event object: `{event}`
+- Custom key: `{"custom_key": [{event1}, {event2}]}`
+
+## Required Fields
+
+All v2 telemetry records must include these fields:
+
+- `schema_version`: Must be 2
+- `timestamp_ns`: Unix timestamp in nanoseconds (>= 0)
+- `event_type`: Non-empty string
+- `collector`: Non-empty string
+- `sampling_interval_ms`: Integer >= 0
+- `pid`: Process ID (>= -1)
+- `host`: Non-empty hostname
+- `device_id`: Device identifier
+- `allocator_allocated_bytes`: Allocated bytes (>= 0)
+- `allocator_reserved_bytes`: Reserved bytes (>= 0)
+- `allocator_active_bytes`: Active bytes (>= 0 or null)
+- `allocator_inactive_bytes`: Inactive bytes (>= 0 or null)
+- `allocator_change_bytes`: Memory change
+- `device_used_bytes`: Device memory used (>= 0)
+- `device_free_bytes`: Device memory free (>= 0 or null)
+- `device_total_bytes`: Total device memory (>= 0 or null)
+- `context`: Context string (or null)
+- `metadata`: Metadata dictionary
+
+## Legacy Format Conversion
+
+The module automatically converts legacy formats from:
+
+- PyTorch GPU profiler
+- TensorFlow memory profiler
+- Custom tracking events
+
+Legacy field mappings:
+- `timestamp` (seconds) → `timestamp_ns` (nanoseconds)
+- `memory_allocated` → `allocator_allocated_bytes`
+- `memory_reserved` → `allocator_reserved_bytes`
+- `memory_change` → `allocator_change_bytes`
+- `device` string → `device_id` integer
+- `backend` → `collector` inference
+
+## Example Usage
+
+```python
+import json
+from gpumemprof.telemetry import (
+    TelemetryEventV2,
+    telemetry_event_to_dict,
+    telemetry_event_from_record,
+    load_telemetry_events,
+    validate_telemetry_record
+)
+
+# Create event from scratch
+event = TelemetryEventV2(
+    schema_version=2,
+    timestamp_ns=int(time.time() * 1e9),
+    event_type="allocation",
+    collector="gpumemprof.cuda_tracker",
+    sampling_interval_ms=100,
+    pid=os.getpid(),
+    host=socket.gethostname(),
+    device_id=0,
+    allocator_allocated_bytes=5 * 1024**3,
+    allocator_reserved_bytes=6 * 1024**3,
+    allocator_active_bytes=4.8 * 1024**3,
+    allocator_inactive_bytes=200 * 1024**2,
+    allocator_change_bytes=512 * 1024**2,
+    device_used_bytes=5.5 * 1024**3,
+    device_free_bytes=10.5 * 1024**3,
+    device_total_bytes=16 * 1024**3,
+    context="training_batch_47",
+    metadata={"batch_size": 32, "learning_rate": 0.001}
+)
+
+# Convert to dict
+event_dict = telemetry_event_to_dict(event)
+
+# Validate
+validate_telemetry_record(event_dict)
+
+# Save to file
+with open("events.json", "w") as f:
+    json.dump([event_dict], f, indent=2)
+
+# Load and convert
+events = load_telemetry_events("events.json")
+for event in events:
+    gb_allocated = event.allocator_allocated_bytes / 1024**3
+    print(f"{event.event_type}: {gb_allocated:.2f} GB allocated")
+
+# Convert legacy format
+legacy_data = {
+    "timestamp": 1709481600.0,
+    "memory_allocated": 5368709120,
+    "memory_reserved": 6442450944,
+    "device": "cuda:0",
+    "backend": "cuda"
+}
+
+event = telemetry_event_from_record(
+    legacy_data,
+    default_collector="gpumemprof.cuda_tracker",
+    default_sampling_interval_ms=100
+)
+
+print(f"Converted event: {event.timestamp_ns} ns")
+print(f"Allocated: {event.allocator_allocated_bytes / 1024**3:.2f} GB")
+```
+
+## Integration with Tracker
+
+The telemetry schema is used by `MemoryTracker.export_events()`:
+
+```python
+from gpumemprof import MemoryTracker
+
+tracker = MemoryTracker(device="cuda:0")
+tracker.start_tracking()
+
+# ... run code ...
+
+tracker.stop_tracking()
+
+# Export uses TelemetryEventV2 format
+tracker.export_events("memory_events.json", format="json")
+
+# Load and analyze
+from gpumemprof.telemetry import load_telemetry_events
+
+events = load_telemetry_events("memory_events.json")
+for event in events:
+    if event.event_type == "warning":
+        print(f"Warning at {event.timestamp_ns}: {event.context}")
+```

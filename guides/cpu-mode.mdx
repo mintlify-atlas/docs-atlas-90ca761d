@@ -1,0 +1,481 @@
+---
+title: CPU memory profiling
+description: Profile CPU memory usage when GPU is unavailable or for CPU-only workloads
+---
+
+The GPU Memory Profiler includes CPU-only profiling for systems without GPU access or when profiling CPU-bound operations.
+
+## When to use CPU mode
+
+CPU profiling is useful when:
+
+- Developing on machines without GPU
+- Testing code before GPU deployment
+- Profiling data preprocessing pipelines
+- Monitoring CPU memory in hybrid workflows
+- Running on Apple Silicon without Metal support
+
+## CPU profiler
+
+The `CPUMemoryProfiler` mirrors the GPU profiler API:
+
+<Steps>
+  <Step title="Initialize profiler">
+    Create a CPU memory profiler:
+
+    ```python
+    from gpumemprof import CPUMemoryProfiler
+
+    profiler = CPUMemoryProfiler()
+    ```
+
+    No device configuration needed - automatically uses current process.
+  </Step>
+
+  <Step title="Profile functions">
+    Profile function memory usage:
+
+    ```python
+    def data_preprocessing(data):
+        # CPU-intensive preprocessing
+        processed = [transform(item) for item in data]
+        return processed
+
+    # Profile the function
+    result = profiler.profile_function(
+        data_preprocessing,
+        large_dataset
+    )
+
+    print(f"Function: {result.name}")
+    print(f"Duration: {result.duration:.3f}s")
+    print(f"Memory diff: {result.memory_diff() / (1024**2):.2f} MB")
+    print(f"Peak RSS: {result.peak_rss / (1024**2):.2f} MB")
+    ```
+
+    The result includes:
+    - `name`: Function name
+    - `duration`: Execution time in seconds
+    - `snapshot_before`: Memory state before execution
+    - `snapshot_after`: Memory state after execution
+    - `peak_rss`: Peak resident set size
+  </Step>
+
+  <Step title="Use context manager">
+    Profile code blocks:
+
+    ```python
+    with profiler.profile_context("data_loading"):
+        # Load large dataset
+        data = load_dataset('large_file.csv')
+        data = preprocess(data)
+        features = extract_features(data)
+
+    # Get profiling results
+    for result in profiler.results:
+        print(f"Operation: {result.name}")
+        print(f"RSS before: {result.snapshot_before.rss / (1024**2):.2f} MB")
+        print(f"RSS after: {result.snapshot_after.rss / (1024**2):.2f} MB")
+        print(f"CPU percent: {result.snapshot_after.cpu_percent:.1f}%")
+    ```
+  </Step>
+
+  <Step title="Real-time monitoring">
+    Monitor CPU memory over time:
+
+    ```python
+    # Start monitoring
+    profiler.start_monitoring(interval=0.5)  # 500ms intervals
+
+    # Your CPU-intensive code
+    for epoch in range(10):
+        for batch in data_batches:
+            process_batch(batch)
+
+    # Stop and get summary
+    profiler.stop_monitoring()
+    summary = profiler.get_summary()
+
+    print(f"Snapshots collected: {summary['snapshots_collected']}")
+    print(f"Peak memory: {summary['peak_memory_usage'] / (1024**2):.2f} MB")
+    print(f"Memory change: {summary['memory_change_from_baseline'] / (1024**2):.2f} MB")
+
+    # Review snapshots
+    for snapshot in profiler.snapshots[-10:]:
+        print(f"Time: {snapshot.timestamp:.2f}, RSS: {snapshot.rss / (1024**2):.2f} MB")
+    ```
+  </Step>
+</Steps>
+
+## CPU memory tracker
+
+The `CPUMemoryTracker` provides real-time tracking with event history:
+
+```python
+from gpumemprof import CPUMemoryTracker
+
+tracker = CPUMemoryTracker(
+    sampling_interval=0.5,   # Sample every 500ms
+    max_events=10000,        # Keep 10k events
+    enable_alerts=True       # Enable threshold alerts
+)
+
+# Start tracking
+tracker.start_tracking()
+
+try:
+    # Your code here
+    for i in range(100):
+        # Allocate memory
+        data = [0] * 1000000
+        # Process data
+        result = process(data)
+        # Release
+        del data
+except Exception as e:
+    print(f"Error: {e}")
+finally:
+    tracker.stop_tracking()
+
+# Get statistics
+stats = tracker.get_statistics()
+print(f"Mode: {stats['mode']}")
+print(f"Total events: {stats['total_events']}")
+print(f"Peak memory: {stats['peak_memory'] / (1024**2):.2f} MB")
+print(f"Current RSS: {stats['current_memory_allocated'] / (1024**2):.2f} MB")
+print(f"Tracking duration: {stats['tracking_duration_seconds']:.1f}s")
+```
+
+### Event filtering
+
+Query specific events:
+
+```python
+# Get all events
+all_events = tracker.get_events()
+
+# Get only allocation events
+allocations = tracker.get_events(event_type='allocation')
+print(f"Total allocations: {len(allocations)}")
+
+# Get recent events
+recent = tracker.get_events(last_n=10)
+
+# Get events since timestamp
+threshold_time = time.time() - 60  # Last 60 seconds
+recent_time = tracker.get_events(since=threshold_time)
+
+# Analyze events
+for event in allocations[:5]:
+    print(f"Time: {event.timestamp:.2f}")
+    print(f"Type: {event.event_type}")
+    print(f"Memory change: {event.memory_change / (1024**2):.2f} MB")
+    print(f"Total RSS: {event.memory_allocated / (1024**2):.2f} MB")
+    print(f"Context: {event.context}")
+    print()
+```
+
+### Memory timeline
+
+Get memory usage over time:
+
+```python
+# Get timeline data
+timeline = tracker.get_memory_timeline(interval=1.0)
+
+# Timeline contains
+print(f"Timestamps: {len(timeline['timestamps'])} points")
+print(f"Allocated: {len(timeline['allocated'])} values")
+print(f"Reserved: {len(timeline['reserved'])} values")
+
+# Plot timeline
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(12, 6))
+plt.plot(timeline['timestamps'], 
+         [a / (1024**2) for a in timeline['allocated']],
+         label='RSS')
+plt.xlabel('Time (s)')
+plt.ylabel('Memory (MB)')
+plt.title('CPU Memory Usage Timeline')
+plt.legend()
+plt.grid(True)
+plt.savefig('cpu_memory_timeline.png')
+```
+
+## Export tracking data
+
+Export CPU tracking events:
+
+<Tabs>
+  <Tab title="JSON export">
+    ```python
+    # Export to JSON
+    tracker.export_events('cpu_tracking.json', format='json')
+    ```
+
+    JSON structure:
+    ```json
+    [
+      {
+        "timestamp": 1234567890.123,
+        "event_type": "allocation",
+        "memory_allocated": 524288000,
+        "memory_reserved": 524288000,
+        "memory_change": 10485760,
+        "device_id": -1,
+        "context": "RSS increased by 10.00 MB",
+        "collector": "gpumemprof.cpu_tracker",
+        "sampling_interval_ms": 500,
+        "pid": 12345,
+        "host": "machine-name"
+      }
+    ]
+    ```
+  </Tab>
+
+  <Tab title="CSV export">
+    ```python
+    # Export to CSV
+    tracker.export_events('cpu_tracking.csv', format='csv')
+    ```
+
+    CSV columns:
+    - timestamp
+    - event_type
+    - memory_allocated
+    - memory_reserved
+    - memory_change
+    - device_id
+    - context
+    - collector
+    - sampling_interval_ms
+    - pid
+    - host
+  </Tab>
+
+  <Tab title="Timestamped export">
+    ```python
+    # Export with automatic timestamp
+    filename = tracker.export_events_with_timestamp(
+        directory='./exports',
+        format='json'
+    )
+    print(f"Exported to: {filename}")
+    # Output: ./exports/cpu_tracker_20260303_142315.json
+    ```
+  </Tab>
+</Tabs>
+
+## CLI usage
+
+The CLI automatically uses CPU mode when GPU is unavailable:
+
+```bash
+# CPU info
+gpumemprof info
+# Output:
+# CUDA is not available. Falling back to CPU-only profiling.
+# Process RSS: 512.00 MB
+# Process VMS: 2.50 GB
+# CPU Count: 8 physical / 16 logical
+
+# CPU monitoring
+gpumemprof monitor --duration 30 --interval 0.5 --output cpu_monitor.csv
+# Mode: CPU
+
+# CPU tracking
+gpumemprof track --duration 60 --output cpu_track.json --format json
+# Running CPU memory tracker (no GPU backend available).
+```
+
+## Metrics explained
+
+<AccordionGroup>
+  <Accordion title="RSS (Resident Set Size)">
+    The portion of memory occupied by a process that is held in RAM:
+
+    ```python
+    snapshot = profiler._take_snapshot()
+    print(f"RSS: {snapshot.rss / (1024**2):.2f} MB")
+    ```
+
+    - Includes all allocated pages in RAM
+    - Excludes swapped pages
+    - Can include shared libraries
+  </Accordion>
+
+  <Accordion title="VMS (Virtual Memory Size)">
+    Total virtual memory allocated to the process:
+
+    ```python
+    snapshot = profiler._take_snapshot()
+    print(f"VMS: {snapshot.vms / (1024**2):.2f} MB")
+    ```
+
+    - Includes memory not yet paged in
+    - Larger than RSS
+    - Represents maximum potential memory usage
+  </Accordion>
+
+  <Accordion title="CPU percent">
+    CPU utilization of the process:
+
+    ```python
+    snapshot = profiler._take_snapshot()
+    print(f"CPU: {snapshot.cpu_percent:.1f}%")
+    ```
+
+    - Percentage of one CPU core
+    - Can exceed 100% on multi-core systems
+    - Averaged over the interval
+  </Accordion>
+</AccordionGroup>
+
+## Integration with PyTorch/TensorFlow
+
+Combine CPU profiling with framework profiling:
+
+<Tabs>
+  <Tab title="PyTorch CPU tensors">
+    ```python
+    import torch
+    from gpumemprof import CPUMemoryProfiler
+
+    profiler = CPUMemoryProfiler()
+
+    with profiler.profile_context("cpu_tensor_operations"):
+        # Large CPU tensor operations
+        x = torch.randn(10000, 10000)
+        y = torch.randn(10000, 10000)
+        result = x @ y
+        result = result.sum()
+
+    summary = profiler.get_summary()
+    print(f"Peak memory: {summary['peak_memory_usage'] / (1024**2):.2f} MB")
+    ```
+  </Tab>
+
+  <Tab title="TensorFlow CPU ops">
+    ```python
+    import tensorflow as tf
+    from gpumemprof import CPUMemoryTracker
+
+    tf.config.set_visible_devices([], 'GPU')  # Force CPU
+
+    tracker = CPUMemoryTracker(sampling_interval=0.5)
+    tracker.start_tracking()
+
+    # CPU-only TensorFlow operations
+    with tf.device('/CPU:0'):
+        x = tf.random.normal([5000, 5000])
+        y = tf.random.normal([5000, 5000])
+        result = tf.matmul(x, y)
+
+    tracker.stop_tracking()
+    stats = tracker.get_statistics()
+    print(f"Peak memory: {stats['peak_memory'] / (1024**2):.2f} MB")
+    ```
+  </Tab>
+
+  <Tab title="Data preprocessing">
+    ```python
+    import numpy as np
+    import pandas as pd
+    from gpumemprof import CPUMemoryProfiler
+
+    profiler = CPUMemoryProfiler()
+
+    # Profile data loading
+    with profiler.profile_context("data_loading"):
+        df = pd.read_csv('large_dataset.csv')
+
+    # Profile preprocessing
+    with profiler.profile_context("preprocessing"):
+        df = df.dropna()
+        df['normalized'] = (df['value'] - df['value'].mean()) / df['value'].std()
+        features = df.values
+
+    # Profile feature extraction
+    with profiler.profile_context("feature_extraction"):
+        features = np.concatenate([features, features**2], axis=1)
+
+    # Review results
+    for result in profiler.results:
+        print(f"{result.name}: {result.memory_diff() / (1024**2):.2f} MB")
+    ```
+  </Tab>
+</Tabs>
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Use for development" icon="laptop-code">
+    Profile locally before GPU deployment:
+
+    ```python
+    # Development (CPU)
+    from gpumemprof import CPUMemoryProfiler
+    profiler = CPUMemoryProfiler()
+
+    # Production (GPU)
+    from gpumemprof import GPUMemoryProfiler
+    profiler = GPUMemoryProfiler()
+    ```
+  </Card>
+
+  <Card title="Monitor preprocessing" icon="gears">
+    Profile data pipelines:
+
+    ```python
+    tracker = CPUMemoryTracker()
+    tracker.start_tracking()
+
+    # Data pipeline
+    data = load_data()
+    data = clean_data(data)
+    features = extract_features(data)
+
+    tracker.stop_tracking()
+    ```
+  </Card>
+
+  <Card title="Export for analysis" icon="file-export">
+    Save tracking data:
+
+    ```python
+    tracker.export_events(
+        'cpu_profile.json',
+        format='json'
+    )
+    ```
+  </Card>
+
+  <Card title="Use consistent APIs" icon="code">
+    Same API as GPU profiling:
+
+    ```python
+    # Works for both CPU and GPU
+    profiler.profile_function(fn)
+    profiler.start_monitoring()
+    profiler.get_summary()
+    ```
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="PyTorch guide" icon="fire" href="/guides/pytorch">
+    GPU profiling for PyTorch
+  </Card>
+  <Card title="TensorFlow guide" icon="brain" href="/guides/tensorflow">
+    GPU profiling for TensorFlow
+  </Card>
+  <Card title="CLI usage" icon="terminal" href="/guides/cli-usage">
+    Command-line profiling tools
+  </Card>
+  <Card title="Visualization" icon="chart-line" href="/guides/visualization">
+    Generate memory usage plots
+  </Card>
+</CardGroup>

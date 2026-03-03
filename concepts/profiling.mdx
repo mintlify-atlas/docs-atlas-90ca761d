@@ -1,0 +1,247 @@
+---
+title: GPU memory profiling
+description: Understand how GPU memory profiling works and how to use the GPUMemoryProfiler class
+---
+
+## Overview
+
+The `GPUMemoryProfiler` class provides comprehensive GPU memory profiling for PyTorch operations. It captures detailed memory snapshots before, during, and after function execution to help you understand memory allocation patterns, peak usage, and identify optimization opportunities.
+
+## How it works
+
+The profiler tracks GPU memory by taking snapshots at critical points during code execution:
+
+1. **Baseline snapshot** - Captures initial memory state when the profiler is initialized
+2. **Before snapshot** - Records memory before a function executes
+3. **Peak snapshot** - Tracks maximum memory usage during execution
+4. **After snapshot** - Captures final memory state after execution
+
+Each snapshot includes:
+- Allocated memory (actual tensor data)
+- Reserved memory (CUDA memory pool)
+- Active/inactive memory from the allocator
+- CPU memory usage (if enabled)
+- Optional stack traces for debugging
+
+## Basic usage
+
+### Profiling a function
+
+Profile a single function call with `profile_function()`:
+
+```python
+import torch
+from gpumemprof import GPUMemoryProfiler
+
+def train_step(model, data):
+    output = model(data)
+    loss = output.sum()
+    loss.backward()
+    return loss
+
+profiler = GPUMemoryProfiler(device="cuda:0")
+
+model = torch.nn.Linear(1000, 1000).cuda()
+data = torch.randn(32, 1000).cuda()
+
+result = profiler.profile_function(train_step, model, data)
+
+print(f"Memory allocated: {result.memory_allocated / 1024**2:.2f} MB")
+print(f"Peak memory: {result.peak_memory_usage() / 1024**2:.2f} MB")
+print(f"Execution time: {result.execution_time:.4f}s")
+```
+
+### Using context manager
+
+Profile blocks of code with the `profile_context()` context manager:
+
+```python
+with profiler.profile_context(name="data_loading"):
+    data = torch.randn(1000, 1000).cuda()
+    processed = data @ data.T
+    result = processed.softmax(dim=-1)
+```
+
+### Continuous monitoring
+
+Monitor memory usage continuously in a background thread:
+
+```python
+profiler.start_monitoring(interval=0.1)  # Sample every 100ms
+
+# Run your training loop
+for epoch in range(10):
+    train_epoch(model, dataloader)
+
+profiler.stop_monitoring()
+
+# Access collected snapshots
+print(f"Collected {len(profiler.snapshots)} snapshots")
+```
+
+## Configuration options
+
+The profiler accepts several configuration options:
+
+```python
+profiler = GPUMemoryProfiler(
+    device="cuda:0",              # GPU device to profile
+    track_tensors=True,           # Count tensor creation/deletion
+    track_cpu_memory=True,        # Track CPU memory alongside GPU
+    collect_stack_traces=False    # Collect stack traces (expensive)
+)
+```
+
+<Note>
+Enabling `collect_stack_traces` adds significant overhead. Only use it for detailed debugging of specific operations.
+</Note>
+
+## Understanding profile results
+
+The `ProfileResult` object contains comprehensive profiling data:
+
+```python
+result = profiler.profile_function(my_function)
+
+# Memory metrics
+result.memory_allocated      # Bytes allocated during execution
+result.memory_freed          # Bytes freed during execution
+result.memory_diff()         # Net memory change
+result.peak_memory_usage()   # Maximum memory used
+
+# Tensor tracking (if enabled)
+result.tensors_created       # Number of tensors created
+result.tensors_deleted       # Number of tensors deleted
+
+# Timing
+result.execution_time        # Total execution time in seconds
+
+# Detailed snapshots
+result.memory_before         # MemorySnapshot before execution
+result.memory_after          # MemorySnapshot after execution
+result.memory_peak           # MemorySnapshot at peak usage
+```
+
+## Memory snapshots
+
+Each `MemorySnapshot` captures the complete memory state:
+
+```python
+snapshot = result.memory_after
+
+snapshot.allocated_memory     # Actual tensor data
+snapshot.reserved_memory      # CUDA memory pool size
+snapshot.active_memory        # Active allocations from allocator
+snapshot.inactive_memory      # Cached but unused memory
+snapshot.cpu_memory          # CPU memory usage (if tracked)
+snapshot.timestamp           # When snapshot was taken
+snapshot.operation           # Operation being profiled
+snapshot.device_id           # GPU device index
+```
+
+<Info>
+The difference between `reserved_memory` and `allocated_memory` indicates memory fragmentation. PyTorch's caching allocator may reserve more memory than actively used.
+</Info>
+
+## Getting profiling summaries
+
+Retrieve aggregated statistics across all profiled operations:
+
+```python
+summary = profiler.get_summary()
+
+print(f"Total functions profiled: {summary['total_functions_profiled']}")
+print(f"Total function calls: {summary['total_function_calls']}")
+print(f"Peak memory usage: {summary['peak_memory_usage'] / 1024**2:.2f} MB")
+print(f"Net memory change: {summary['net_memory_change'] / 1024**2:.2f} MB")
+
+# Per-function statistics
+for func_name, stats in summary['function_summaries'].items():
+    print(f"{func_name}:")
+    print(f"  Calls: {stats['call_count']}")
+    print(f"  Avg time: {stats['avg_time']:.4f}s")
+    print(f"  Avg memory: {stats['avg_memory_allocated'] / 1024**2:.2f} MB")
+    print(f"  Peak memory: {stats['peak_memory'] / 1024**2:.2f} MB")
+```
+
+## Peak memory tracking
+
+The profiler automatically resets and tracks peak memory statistics for each profiled operation:
+
+```python
+# Peak memory is reset before each profile
+result = profiler.profile_function(my_function)
+
+# Get peak memory that occurred during this specific execution
+peak = result.peak_memory_usage()
+```
+
+This is implemented by calling `torch.cuda.reset_peak_memory_stats()` before execution and querying `torch.cuda.memory_stats()` for peak values afterward. See `profiler.py:200` and `profiler.py:244` for implementation details.
+
+## Error handling
+
+The profiler captures memory state even when the profiled function raises an exception:
+
+```python
+try:
+    result = profiler.profile_function(buggy_function)
+except Exception as e:
+    # Memory snapshot was still captured
+    print(f"Function failed but memory was tracked")
+    # Result is stored in profiler.results
+    last_result = profiler.results[-1]
+    print(f"Memory before error: {last_result.memory_after.allocated_memory}")
+    raise
+```
+
+## Clearing results
+
+Reset all profiling data and establish a new baseline:
+
+```python
+profiler.clear_results()
+# All results, snapshots, and statistics are cleared
+# Peak memory stats are reset
+# New baseline snapshot is captured
+```
+
+## Advanced: Tensor tracking
+
+When `track_tensors=True`, the profiler counts CUDA tensors before and after each operation:
+
+```python
+profiler = GPUMemoryProfiler(track_tensors=True)
+result = profiler.profile_function(create_tensors)
+
+print(f"Tensors created: {result.tensors_created}")
+print(f"Tensors deleted: {result.tensors_deleted}")
+```
+
+<Tip>
+Tensor tracking uses garbage collection to enumerate CUDA tensors, which adds overhead. The count represents tensors visible to Python's garbage collector, not all CUDA allocations.
+</Tip>
+
+## Device management
+
+The profiler validates and normalizes device specifications:
+
+```python
+# All of these work
+profiler = GPUMemoryProfiler(device="cuda:0")
+profiler = GPUMemoryProfiler(device=0)
+profiler = GPUMemoryProfiler(device=torch.device("cuda:0"))
+profiler = GPUMemoryProfiler(device=None)  # Auto-detect current device
+```
+
+The device is validated at initialization to ensure CUDA is available and the device index is valid. See `profiler.py:126-156` for the device setup logic.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Memory tracking" href="/concepts/tracking">
+    Learn about real-time memory tracking with alerts
+  </Card>
+  <Card title="Memory leaks" href="/concepts/memory-leaks">
+    Detect and diagnose memory leaks
+  </Card>
+</CardGroup>

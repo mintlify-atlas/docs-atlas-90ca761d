@@ -1,0 +1,335 @@
+---
+title: gpumemprof
+description: CLI reference for the gpumemprof command-line interface
+---
+
+The `gpumemprof` command provides PyTorch GPU memory profiling and analysis tools.
+
+## Installation
+
+Install the package to access the CLI:
+
+```bash
+pip install gpu-memory-profiler
+```
+
+Optional dependencies:
+
+```bash
+pip install 'gpu-memory-profiler[torch]'  # PyTorch support
+pip install 'gpu-memory-profiler[viz]'    # Visualization support
+```
+
+## Global usage
+
+```bash
+gpumemprof <command> [options]
+```
+
+## Commands
+
+### info
+
+Display GPU and system information.
+
+```bash
+gpumemprof info [--device DEVICE] [--detailed]
+```
+
+**Options:**
+
+- `--device DEVICE` - GPU device ID (default: current device)
+- `--detailed` - Show detailed information including memory summary
+
+**Example:**
+
+```bash
+# Show basic GPU info
+gpumemprof info
+
+# Show detailed info for GPU 0
+gpumemprof info --device 0 --detailed
+```
+
+**Output example:**
+
+```
+GPU Memory Profiler - System Information
+==================================================
+Platform: Linux
+Python Version: 3.10.12
+CUDA Available: True
+Detected Backend: cuda
+CUDA Version: 12.1
+GPU Device Count: 1
+Current Device: 0
+
+GPU 0 Information:
+  Name: NVIDIA GeForce RTX 3090
+  Total Memory: 24.00 GB
+  Allocated: 0.00 GB
+  Reserved: 0.00 GB
+  Multiprocessors: 82
+```
+
+### monitor
+
+Monitor memory usage for a specified duration.
+
+```bash
+gpumemprof monitor [--device DEVICE] [--duration DURATION] [--interval INTERVAL] [--output OUTPUT] [--format {csv,json}]
+```
+
+**Options:**
+
+- `--device DEVICE` - GPU device ID (default: current device)
+- `--duration DURATION` - Monitoring duration in seconds (default: 10)
+- `--interval INTERVAL` - Sampling interval in seconds (default: 0.1)
+- `--output OUTPUT` - Output file for monitoring data
+- `--format {csv,json}` - Output format (default: csv)
+
+**Example:**
+
+```bash
+# Monitor for 60 seconds with 0.5s interval
+gpumemprof monitor --duration 60 --interval 0.5
+
+# Monitor and save to CSV
+gpumemprof monitor --duration 30 --output monitoring.csv --format csv
+
+# Monitor and save to JSON
+gpumemprof monitor --duration 30 --output monitoring.json --format json
+```
+
+**Output example:**
+
+```
+Starting memory monitoring for 60 seconds...
+Mode: GPU (cuda)
+Sampling interval: 0.5s
+Press Ctrl+C to stop early
+
+Elapsed: 0.0s, Current Memory: 0.15 GB
+Elapsed: 5.0s, Current Memory: 1.23 GB
+Elapsed: 10.0s, Current Memory: 2.45 GB
+
+Monitoring Summary:
+------------------------------
+Snapshots collected: 120
+Peak memory usage: 2.45 GB
+Memory change from baseline: 2.30 GB
+Data saved to: monitoring.csv
+```
+
+### track
+
+Real-time memory tracking with alerts and automatic cleanup options.
+
+```bash
+gpumemprof track [--device DEVICE] [--duration DURATION] [--interval INTERVAL] 
+                 [--output OUTPUT] [--format {csv,json}] [--watchdog]
+                 [--warning-threshold WARNING] [--critical-threshold CRITICAL]
+                 [--oom-flight-recorder] [--oom-dump-dir DIR] 
+                 [--oom-buffer-size SIZE] [--oom-max-dumps N] [--oom-max-total-mb MB]
+```
+
+**Options:**
+
+- `--device DEVICE` - GPU device ID (default: current device)
+- `--duration DURATION` - Tracking duration in seconds (default: indefinite)
+- `--interval INTERVAL` - Sampling interval in seconds (default: 0.1)
+- `--output OUTPUT` - Output file for tracking events
+- `--format {csv,json}` - Output format (default: csv)
+- `--watchdog` - Enable automatic memory cleanup
+- `--warning-threshold WARNING` - Memory warning threshold percentage (default: 80)
+- `--critical-threshold CRITICAL` - Memory critical threshold percentage (default: 95)
+- `--oom-flight-recorder` - Enable automatic OOM flight recorder dump artifacts
+- `--oom-dump-dir DIR` - Directory for OOM dump bundles (default: oom_dumps)
+- `--oom-buffer-size SIZE` - Ring buffer size for OOM event dumps (default: max tracker events)
+- `--oom-max-dumps N` - Maximum number of retained OOM dump bundles (default: 5)
+- `--oom-max-total-mb MB` - Maximum retained OOM dump storage in MB (default: 256)
+
+**Example:**
+
+```bash
+# Track indefinitely with alerts
+gpumemprof track --output tracking.csv
+
+# Track with custom thresholds and watchdog
+gpumemprof track --warning-threshold 75 --critical-threshold 90 --watchdog
+
+# Track with OOM flight recorder
+gpumemprof track --oom-flight-recorder --oom-dump-dir ./oom_dumps --output track.json --format json
+
+# Track for 30 seconds with all features
+gpumemprof track --duration 30 --interval 0.5 --watchdog \
+  --warning-threshold 80 --critical-threshold 95 \
+  --oom-flight-recorder --oom-max-dumps 10 \
+  --output track.json --format json
+```
+
+**Output example:**
+
+```
+Starting real-time memory tracking...
+Device: current
+Sampling interval: 0.1s
+Duration: indefinite
+Press Ctrl+C to stop
+
+OOM flight recorder enabled:
+  Dump directory: oom_dumps
+  Buffer size: 1000 events
+  Max dumps: 5
+  Max total size: 256 MB
+
+[14:23:15] WARNING: Memory usage at 82.3%
+[14:23:20] CRITICAL: Memory usage at 96.1%
+
+Tracking Summary:
+------------------------------
+Total events: 4523
+Peak memory: 22.87 GB
+Automatic cleanups: 2
+Events saved to: tracking.csv
+```
+
+### analyze
+
+Analyze profiling results from previous monitoring or tracking sessions.
+
+```bash
+gpumemprof analyze <input_file> [--output OUTPUT] [--format {json,txt}] 
+                   [--visualization] [--plot-dir DIR]
+```
+
+**Positional arguments:**
+
+- `input_file` - Input file with profiling results (required)
+
+**Options:**
+
+- `--output OUTPUT` - Output file for analysis report
+- `--format {json,txt}` - Output format (default: json)
+- `--visualization` - Generate visualization plots
+- `--plot-dir DIR` - Directory for visualization plots (default: plots)
+
+**Example:**
+
+```bash
+# Basic analysis
+gpumemprof analyze results.json
+
+# Generate text report
+gpumemprof analyze results.json --format txt --output analysis.txt
+
+# Generate visualizations
+gpumemprof analyze results.json --visualization --plot-dir ./plots
+```
+
+**Output example:**
+
+```
+Analyzing profiling results from: results.json
+Analysis functionality is available through the Python API.
+Please use the Python library for detailed analysis:
+
+Example:
+from gpumemprof import MemoryAnalyzer
+analyzer = MemoryAnalyzer()
+patterns = analyzer.analyze_memory_patterns(results)
+insights = analyzer.generate_performance_insights(results)
+report = analyzer.generate_optimization_report(results)
+
+Basic Analysis:
+Input file: results.json
+File size: 45823 bytes
+Number of snapshots: 120
+```
+
+### diagnose
+
+Produce a portable diagnostic bundle for debugging memory failures.
+
+```bash
+gpumemprof diagnose [--output OUTPUT] [--device DEVICE] [--duration DURATION] [--interval INTERVAL]
+```
+
+**Options:**
+
+- `--output OUTPUT` - Output directory for the artifact bundle (default: current working directory)
+- `--device DEVICE` - GPU device ID (default: current device)
+- `--duration DURATION` - Seconds to run tracker for telemetry (default: 5, use 0 to skip)
+- `--interval INTERVAL` - Sampling interval for timeline (default: 0.5)
+
+**Exit codes:**
+
+- `0` - Success, no memory risk detected
+- `1` - Runtime or argument failure
+- `2` - Success with memory risk detected
+
+**Example:**
+
+```bash
+# Quick diagnostic (no telemetry collection)
+gpumemprof diagnose --duration 0 --output ./diagnostics
+
+# Full diagnostic with 5 seconds of telemetry
+gpumemprof diagnose --duration 5 --interval 0.5 --output ./diag_bundle
+
+# Diagnostic for specific device
+gpumemprof diagnose --device 1 --output ./diag_gpu1
+```
+
+**Output example:**
+
+```
+Artifact: /path/to/diagnostics/gpumemprof_diag_20260303_142530
+Status: OK (exit_code=0)
+Findings: no memory risk detected
+```
+
+Or with risk detected:
+
+```
+Artifact: /path/to/diagnostics/gpumemprof_diag_20260303_142530
+Status: MEMORY_RISK (exit_code=2)
+Findings: high_memory_pressure, fragmentation_detected
+```
+
+## Backend support
+
+The `gpumemprof` CLI automatically detects the available backend:
+
+- **CUDA** - NVIDIA GPUs with CUDA support
+- **ROCm** - AMD GPUs with ROCm support
+- **MPS** - Apple Silicon with Metal Performance Shaders
+- **CPU** - Fallback for systems without GPU support
+
+The CLI will adapt its behavior based on the detected backend. For MPS backend, the `--device` flag is ignored as there is only a single logical device.
+
+## Common workflows
+
+### Quick system check
+
+```bash
+gpumemprof info --detailed
+```
+
+### Monitor training run
+
+```bash
+gpumemprof track --duration 3600 --watchdog --output training.json --format json
+```
+
+### Debug OOM errors
+
+```bash
+gpumemprof track --oom-flight-recorder --oom-dump-dir ./oom_analysis --output track.json
+```
+
+### Generate diagnostic bundle
+
+```bash
+gpumemprof diagnose --duration 5 --output ./diagnostics
+```

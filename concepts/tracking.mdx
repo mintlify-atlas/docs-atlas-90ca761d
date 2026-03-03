@@ -1,0 +1,356 @@
+---
+title: Real-time memory tracking
+description: Monitor GPU memory continuously with alerts, thresholds, and automated diagnostics
+---
+
+## Overview
+
+The `MemoryTracker` class provides real-time GPU memory monitoring with automatic alerts, threshold-based warnings, and diagnostic event capture. Unlike the profiler which focuses on individual function calls, the tracker continuously monitors memory usage in a background thread.
+
+## Key features
+
+- **Continuous monitoring** - Sample memory at regular intervals in a background thread
+- **Alert system** - Configurable thresholds for memory warnings and critical alerts
+- **Event timeline** - Track all memory allocation, deallocation, and peak events
+- **Multi-backend support** - Works with CUDA, ROCm, and Apple MPS
+- **OOM flight recorder** - Automatic diagnostic dumps when out-of-memory errors occur
+- **Memory watchdog** - Automated cleanup when thresholds are exceeded
+
+## Basic usage
+
+### Starting the tracker
+
+```python
+from gpumemprof import MemoryTracker
+
+# Create tracker with default settings
+tracker = MemoryTracker(
+    device="cuda:0",
+    sampling_interval=0.1,  # Sample every 100ms
+    max_events=10000        # Keep last 10k events
+)
+
+# Start background monitoring
+tracker.start_tracking()
+
+# Run your code
+train_model()
+
+# Stop monitoring
+tracker.stop_tracking()
+```
+
+### Using as context manager
+
+```python
+with MemoryTracker(device="cuda:0") as tracker:
+    # Tracking starts automatically
+    train_model()
+    
+    # Access statistics
+    stats = tracker.get_statistics()
+    print(f"Peak memory: {stats['peak_memory'] / 1024**2:.2f} MB")
+# Tracking stops automatically
+```
+
+## Configuration
+
+The tracker supports extensive configuration:
+
+```python
+tracker = MemoryTracker(
+    device="cuda:0",
+    sampling_interval=0.1,           # Sample every 100ms
+    max_events=10000,                # Keep 10k events in memory
+    enable_alerts=True,              # Enable threshold alerts
+    enable_oom_flight_recorder=True, # Enable OOM diagnostics
+    oom_dump_dir="oom_dumps",        # Where to save OOM dumps
+    oom_buffer_size=10000,           # Events to include in dumps
+    oom_max_dumps=5,                 # Keep max 5 dump bundles
+    oom_max_total_mb=256             # Max 256MB total dump storage
+)
+```
+
+## Understanding tracking events
+
+The tracker generates events for all memory state changes:
+
+```python
+events = tracker.get_events()
+
+for event in events:
+    print(f"Type: {event.event_type}")
+    print(f"Time: {event.timestamp}")
+    print(f"Allocated: {event.memory_allocated / 1024**2:.2f} MB")
+    print(f"Reserved: {event.memory_reserved / 1024**2:.2f} MB")
+    print(f"Change: {event.memory_change / 1024**2:.2f} MB")
+    print(f"Context: {event.context}")
+```
+
+### Event types
+
+The tracker generates several event types:
+
+- `start` - Tracking started
+- `stop` - Tracking stopped
+- `allocation` - Memory was allocated (positive change)
+- `deallocation` - Memory was freed (negative change)
+- `peak` - New peak memory reached
+- `warning` - Memory threshold warning
+- `critical` - Critical memory level
+- `error` - Tracking error or OOM detected
+- `cleanup` - Memory cleanup performed (by watchdog)
+
+## Alert thresholds
+
+Configure alert thresholds to receive warnings when memory usage exceeds limits:
+
+```python
+# Default thresholds
+tracker.thresholds = {
+    'memory_warning_percent': 80.0,    # Warn at 80% usage
+    'memory_critical_percent': 95.0,   # Critical at 95% usage
+    'memory_leak_threshold': 100*1024*1024,  # 100MB growth
+    'fragmentation_threshold': 0.3,    # 30% fragmentation
+}
+
+# Change a threshold
+tracker.set_threshold('memory_warning_percent', 75.0)
+```
+
+The tracker automatically checks thresholds during monitoring and generates alert events. See `tracker.py:317-349` for the alert checking logic.
+
+### Alert callbacks
+
+Register custom callbacks to respond to alerts:
+
+```python
+def on_memory_alert(event):
+    if event.event_type == 'critical':
+        print(f"CRITICAL: {event.context}")
+        # Take action: save checkpoint, reduce batch size, etc.
+        torch.cuda.empty_cache()
+
+tracker.add_alert_callback(on_memory_alert)
+```
+
+Callbacks are triggered for `warning`, `critical`, and `error` events. See `tracker.py:308-315` for callback execution.
+
+## Memory statistics
+
+Retrieve comprehensive tracking statistics:
+
+```python
+stats = tracker.get_statistics()
+
+print(f"Backend: {stats['backend']}")
+print(f"Peak memory: {stats['peak_memory'] / 1024**2:.2f} MB")
+print(f"Total allocations: {stats['total_allocations']}")
+print(f"Total deallocations: {stats['total_deallocations']}")
+print(f"Alert count: {stats['alert_count']}")
+print(f"Current utilization: {stats['memory_utilization_percent']:.1f}%")
+
+# Time-based metrics
+print(f"Tracking duration: {stats['tracking_duration_seconds']:.2f}s")
+print(f"Allocations/sec: {stats['allocations_per_second']:.2f}")
+print(f"Bytes allocated/sec: {stats['bytes_allocated_per_second'] / 1024**2:.2f} MB/s")
+```
+
+## Filtering events
+
+Query events with flexible filters:
+
+```python
+# Get only allocation events
+allocations = tracker.get_events(event_type='allocation')
+
+# Get last 100 events
+recent = tracker.get_events(last_n=100)
+
+# Get events since a timestamp
+import time
+start_time = time.time()
+# ... run code ...
+recent_events = tracker.get_events(since=start_time)
+
+# Get only alerts
+alerts = tracker.get_alerts(last_n=10)
+```
+
+## Memory timeline
+
+Get aggregated memory usage over time:
+
+```python
+timeline = tracker.get_memory_timeline(interval=1.0)  # 1 second intervals
+
+timestamps = timeline['timestamps']
+allocated = timeline['allocated']
+reserved = timeline['reserved']
+
+# Plot with matplotlib
+import matplotlib.pyplot as plt
+plt.plot(timestamps, [a/1024**2 for a in allocated], label='Allocated')
+plt.plot(timestamps, [r/1024**2 for r in reserved], label='Reserved')
+plt.xlabel('Time (s)')
+plt.ylabel('Memory (MB)')
+plt.legend()
+plt.show()
+```
+
+## Exporting tracking data
+
+Export events for analysis in other tools:
+
+```python
+# Export to CSV
+tracker.export_events('memory_trace.csv', format='csv')
+
+# Export to JSON
+tracker.export_events('memory_trace.json', format='json')
+```
+
+Exported data includes telemetry metadata such as backend capabilities, sampling source, and system information. See `tracker.py:566-644` for export implementation.
+
+## OOM flight recorder
+
+The OOM flight recorder automatically captures diagnostic information when out-of-memory errors occur.
+
+### Automatic OOM capture
+
+```python
+tracker = MemoryTracker(
+    enable_oom_flight_recorder=True,
+    oom_dump_dir="oom_dumps",
+    oom_buffer_size=5000  # Include 5k events in dump
+)
+
+tracker.start_tracking()
+
+try:
+    # This might trigger OOM
+    huge_tensor = torch.randn(100000, 100000).cuda()
+except RuntimeError as e:
+    # Tracker automatically detects and captures OOM
+    dump_path = tracker.handle_exception(e, context="tensor_allocation")
+    if dump_path:
+        print(f"OOM diagnostics saved to: {dump_path}")
+    raise
+```
+
+### Context manager for OOM capture
+
+```python
+with tracker.capture_oom(context="training_step", metadata={"epoch": 5}):
+    # Any OOM here is automatically captured
+    output = model(data)
+    loss = output.sum()
+    loss.backward()
+```
+
+If an OOM occurs, the tracker:
+1. Classifies the exception (CUDA OOM, TensorFlow ResourceExhausted, etc.)
+2. Captures all buffered events
+3. Records current memory state
+4. Saves diagnostic bundle to disk
+5. Prunes old dumps to stay within retention limits
+
+See `tracker.py:371-425` for OOM handling and `oom_flight_recorder.py:103-160` for dump creation.
+
+### OOM dump contents
+
+Each OOM dump bundle contains:
+- `manifest.json` - Dump metadata and schema version
+- `events.json` - All buffered tracking events
+- `metadata.json` - Exception details and context
+- `environment.json` - System info and environment
+
+Dumps are automatically pruned based on `oom_max_dumps` and `oom_max_total_mb` settings.
+
+## Memory watchdog
+
+The `MemoryWatchdog` automatically cleans up memory when thresholds are exceeded:
+
+```python
+from gpumemprof import MemoryWatchdog
+
+tracker = MemoryTracker(enable_alerts=True)
+watchdog = MemoryWatchdog(
+    tracker=tracker,
+    auto_cleanup=True,
+    cleanup_threshold=0.9,           # Trigger at 90% usage
+    aggressive_cleanup_threshold=0.95 # Aggressive at 95%
+)
+
+tracker.start_tracking()
+
+# Watchdog automatically calls torch.cuda.empty_cache() when needed
+train_model()
+
+# Manual cleanup if needed
+watchdog.force_cleanup(aggressive=True)
+
+# Check cleanup stats
+stats = watchdog.get_cleanup_stats()
+print(f"Cleanups performed: {stats['cleanup_count']}")
+```
+
+The watchdog:
+- Registers as an alert callback on the tracker
+- Triggers cleanup when memory warnings occur
+- Enforces minimum 30-second interval between cleanups
+- Supports both standard and aggressive cleanup modes
+
+Standard cleanup calls `torch.cuda.empty_cache()`. Aggressive cleanup additionally runs garbage collection and synchronizes the GPU. See `tracker.py:743-776` for cleanup implementation.
+
+## Multi-backend support
+
+The tracker automatically detects and adapts to different backends:
+
+```python
+# CUDA/ROCm
+tracker = MemoryTracker(device="cuda:0")
+
+# Apple MPS
+tracker = MemoryTracker(device="mps")
+
+# Check detected backend
+print(f"Backend: {tracker.backend}")  # 'cuda', 'rocm', or 'mps'
+print(f"Capabilities: {tracker.collector_capabilities}")
+```
+
+Backend capabilities indicate which metrics are available:
+- `supports_device_total` - Can query total device memory
+- `supports_device_free` - Can query free device memory
+- `sampling_source` - Where samples come from (e.g., `torch.cuda`)
+
+See `tracker.py:79-137` for initialization and backend detection.
+
+## Best practices
+
+<Tip>
+**Sampling interval**: Start with 100ms (0.1s). Lower values provide more detail but increase overhead. For production, 500ms-1s is often sufficient.
+</Tip>
+
+<Tip>
+**Event buffer size**: The `max_events` parameter controls memory usage. Each event uses ~500 bytes, so 10,000 events ≈ 5MB. Increase for long-running processes.
+</Tip>
+
+<Tip>
+**OOM dumps**: Keep `oom_max_dumps` low (3-5) to avoid filling disk. Set `oom_max_total_mb` based on available disk space.
+</Tip>
+
+<Warning>
+Continuous tracking adds overhead. For performance-critical sections, call `stop_tracking()` and resume afterward.
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="OOM detection" href="/concepts/oom-detection">
+    Deep dive into OOM flight recorder
+  </Card>
+  <Card title="Memory leaks" href="/concepts/memory-leaks">
+    Detect and analyze memory leaks
+  </Card>
+</CardGroup>

@@ -1,0 +1,385 @@
+---
+title: Context profiler
+description: High-level TensorFlow profiling decorators and context managers
+---
+
+## Module functions
+
+Simplified profiling interface using a global profiler instance.
+
+### profile_function
+
+Decorator to profile function memory usage.
+
+```python
+def profile_function(
+    func: Optional[F] = None,
+    *,
+    profiler: Optional[TFMemoryProfiler] = None,
+    name: Optional[str] = None
+) -> Union[Callable[[F], F], F]
+```
+
+<ParamField path="func" type="Callable" optional>
+  Function to profile (when used without parentheses)
+</ParamField>
+
+<ParamField path="profiler" type="TFMemoryProfiler" optional>
+  Profiler instance. Uses global profiler if None
+</ParamField>
+
+<ParamField path="name" type="str" optional>
+  Custom name for profiling. Defaults to function name
+</ParamField>
+
+**Example:**
+
+```python
+from tfmemprof.context_profiler import profile_function
+
+@profile_function
+def train_model(model, data):
+    return model.fit(data)
+
+# With custom name
+@profile_function(name="inference")
+def predict(model, x):
+    return model.predict(x)
+```
+
+### profile_context
+
+Context manager for profiling code blocks.
+
+```python
+@contextmanager
+def profile_context(
+    name: str = "context",
+    profiler: Optional[TFMemoryProfiler] = None
+) -> Iterator[None]
+```
+
+<ParamField path="name" type="str" default="context">
+  Name for the profiling context
+</ParamField>
+
+<ParamField path="profiler" type="TFMemoryProfiler" optional>
+  Profiler instance. Uses global profiler if None
+</ParamField>
+
+**Example:**
+
+```python
+from tfmemprof.context_profiler import profile_context
+
+with profile_context("data_loading"):
+    dataset = load_data()
+    
+with profile_context("model_training"):
+    model.fit(dataset)
+```
+
+### get_global_profiler
+
+Get or create the global profiler instance.
+
+```python
+def get_global_profiler() -> TFMemoryProfiler
+```
+
+<ResponseField name="TFMemoryProfiler" type="TFMemoryProfiler">
+  Global profiler instance
+</ResponseField>
+
+### set_global_profiler
+
+Set the global profiler instance.
+
+```python
+def set_global_profiler(profiler: TFMemoryProfiler) -> None
+```
+
+<ParamField path="profiler" type="TFMemoryProfiler">
+  Profiler instance to use globally
+</ParamField>
+
+### clear_global_profiler
+
+Clear global profiler state and reset.
+
+```python
+def clear_global_profiler() -> None
+```
+
+### clear_profiles
+
+Reset profiling data without discarding the global profiler.
+
+```python
+def clear_profiles() -> None
+```
+
+### get_profile_summaries
+
+Return aggregated profiling summaries for recent functions/contexts.
+
+```python
+def get_profile_summaries(limit: Optional[int] = None) -> List[Dict[str, Any]]
+```
+
+<ParamField path="limit" type="int" optional>
+  Maximum number of summaries to return. Returns all if None
+</ParamField>
+
+<ResponseField name="List[Dict]" type="List[Dict[str, Any]]">
+  <ResponseField name="name" type="str">
+    Function or context name
+  </ResponseField>
+  <ResponseField name="calls" type="int">
+    Number of times called
+  </ResponseField>
+  <ResponseField name="total_duration" type="float">
+    Total execution time in seconds
+  </ResponseField>
+  <ResponseField name="total_memory_used" type="float">
+    Total memory used in MB
+  </ResponseField>
+  <ResponseField name="peak_memory" type="float">
+    Peak memory in MB
+  </ResponseField>
+</ResponseField>
+
+## ProfiledLayer
+
+Wrapper for TensorFlow layers with automatic profiling.
+
+### Constructor
+
+```python
+ProfiledLayer(
+    layer: Any,
+    profiler: Optional[TFMemoryProfiler] = None,
+    name: Optional[str] = None
+)
+```
+
+<ParamField path="layer" type="tf.keras.layers.Layer">
+  TensorFlow layer to profile
+</ParamField>
+
+<ParamField path="profiler" type="TFMemoryProfiler" optional>
+  Profiler instance. Uses global profiler if None
+</ParamField>
+
+<ParamField path="name" type="str" optional>
+  Custom name for profiling. Defaults to layer name
+</ParamField>
+
+**Example:**
+
+```python
+from tfmemprof.context_profiler import ProfiledLayer
+import tensorflow as tf
+
+layer = tf.keras.layers.Dense(512, activation='relu')
+profiled_layer = ProfiledLayer(layer, name="dense_512")
+
+# Use in model
+model = tf.keras.Sequential([
+    profiled_layer,
+    tf.keras.layers.Dense(10)
+])
+```
+
+### profile_model
+
+Profile all layers in a TensorFlow model.
+
+```python
+def profile_model(
+    model: Any,
+    profiler: Optional[TFMemoryProfiler] = None
+) -> Any
+```
+
+<ParamField path="model" type="tf.keras.Model">
+  TensorFlow model to profile
+</ParamField>
+
+<ParamField path="profiler" type="TFMemoryProfiler" optional>
+  Profiler instance
+</ParamField>
+
+<ResponseField name="model" type="tf.keras.Model">
+  Model with profiled layers
+</ResponseField>
+
+## TensorFlowProfiler
+
+High-level TensorFlow profiling interface.
+
+### Constructor
+
+```python
+TensorFlowProfiler(device: Optional[str] = None)
+```
+
+<ParamField path="device" type="str" optional>
+  TensorFlow device name
+</ParamField>
+
+### Methods
+
+#### profile_training
+
+Profile model training.
+
+```python
+def profile_training(
+    self,
+    model: Any,
+    dataset: Any,
+    epochs: int = 1,
+    steps_per_epoch: Optional[int] = None
+) -> None
+```
+
+<ParamField path="model" type="tf.keras.Model">
+  TensorFlow model
+</ParamField>
+
+<ParamField path="dataset" type="tf.data.Dataset">
+  Training dataset
+</ParamField>
+
+<ParamField path="epochs" type="int" default="1">
+  Number of epochs to profile
+</ParamField>
+
+<ParamField path="steps_per_epoch" type="int" optional>
+  Steps per epoch to profile
+</ParamField>
+
+#### profile_inference
+
+Profile model inference.
+
+```python
+def profile_inference(
+    self,
+    model: Any,
+    data: Any,
+    batch_size: int = 32
+) -> None
+```
+
+<ParamField path="model" type="tf.keras.Model">
+  TensorFlow model
+</ParamField>
+
+<ParamField path="data" type="Union[tf.data.Dataset, np.ndarray]">
+  Input data
+</ParamField>
+
+<ParamField path="batch_size" type="int" default="32">
+  Batch size for inference
+</ParamField>
+
+#### get_results
+
+Get profiling results.
+
+```python
+def get_results(self) -> ProfileResult
+```
+
+#### reset
+
+Reset profiler state.
+
+```python
+def reset(self) -> None
+```
+
+## profile_keras_training
+
+Profile Keras model training with automatic dataset creation.
+
+```python
+def profile_keras_training(
+    model: Any,
+    x_train: Any,
+    y_train: Any,
+    epochs: int = 1,
+    batch_size: int = 32,
+    validation_data: Optional[Any] = None,
+    profiler: Optional[TFMemoryProfiler] = None
+) -> None
+```
+
+<ParamField path="model" type="tf.keras.Model">
+  Keras model
+</ParamField>
+
+<ParamField path="x_train" type="np.ndarray">
+  Training data
+</ParamField>
+
+<ParamField path="y_train" type="np.ndarray">
+  Training labels
+</ParamField>
+
+<ParamField path="epochs" type="int" default="1">
+  Number of epochs
+</ParamField>
+
+<ParamField path="batch_size" type="int" default="32">
+  Batch size
+</ParamField>
+
+<ParamField path="validation_data" type="Tuple" optional>
+  Validation data tuple (x_val, y_val)
+</ParamField>
+
+## Example
+
+```python
+from tfmemprof.context_profiler import (
+    profile_function,
+    profile_context,
+    get_profile_summaries,
+    TensorFlowProfiler
+)
+import tensorflow as tf
+
+# Simple function profiling
+@profile_function
+def build_model():
+    return tf.keras.Sequential([
+        tf.keras.layers.Dense(512, activation='relu'),
+        tf.keras.layers.Dense(10)
+    ])
+
+# Context profiling
+with profile_context("data_preparation"):
+    x_train, y_train = prepare_data()
+
+model = build_model()
+
+with profile_context("training"):
+    model.compile(optimizer='adam', loss='mse')
+    model.fit(x_train, y_train, epochs=5)
+
+# Get summaries
+summaries = get_profile_summaries(limit=5)
+for summary in summaries:
+    print(f"{summary['name']}: {summary['peak_memory']:.2f} MB")
+
+# High-level profiler
+profiler = TensorFlowProfiler(device='/GPU:0')
+dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(32)
+profiler.profile_training(model, dataset, epochs=3)
+
+results = profiler.get_results()
+print(f"Peak memory: {results.peak_memory_mb:.2f} MB")
+```

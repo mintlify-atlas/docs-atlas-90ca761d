@@ -1,0 +1,183 @@
+---
+title: Context managers
+description: Use context managers for flexible memory profiling
+---
+
+Context managers provide a flexible way to profile specific code blocks and automatically track memory usage during execution. The GPU Memory Profiler offers several context manager APIs for different use cases.
+
+## Profile context
+
+The `profile_context()` method profiles a block of code and automatically captures memory snapshots:
+
+```python
+from gpumemprof import GPUMemoryProfiler
+import torch
+
+profiler = GPUMemoryProfiler()
+
+with profiler.profile_context("inference_pass"):
+    model.eval()
+    with torch.no_grad():
+        inputs = torch.randn(64, 784, device="cuda")
+        outputs = model(inputs)
+        probs = torch.softmax(outputs, dim=-1)
+```
+
+See pytorch_demo.py:65-73
+
+The context manager automatically:
+- Records memory state before entering the block
+- Captures memory changes during execution
+- Stores profiling results with the given name
+- Handles cleanup on exit
+
+## Decorator pattern
+
+Use the `@profile_function` decorator from the context profiler module:
+
+```python
+from gpumemprof import profile_function
+
+@profile_function
+def train_step(model, batch):
+    optimizer.zero_grad()
+    outputs = model(batch["inputs"])
+    loss = criterion(outputs, batch["targets"])
+    loss.backward()
+    optimizer.step()
+    return loss.item()
+
+loss = train_step(model, batch)
+```
+
+See context_profiler.py:31-85
+
+You can customize the profile name:
+
+```python
+@profile_function(name="custom_training_step")
+def train_step(model, batch):
+    # training code
+    pass
+```
+
+## Global profiler
+
+Use the global profiler instance for convenience:
+
+```python
+from gpumemprof import profile_context, get_summary
+
+# Profile using global profiler
+with profile_context("data_loading"):
+    data = load_dataset()
+    data = preprocess(data)
+
+# Get results from global profiler
+summary = get_summary()
+print(f"Peak memory: {summary['peak_memory_mb']:.2f} MB")
+```
+
+See context_profiler.py:88-112 and context_profiler.py:222-238
+
+## Nested contexts
+
+Profile nested code blocks to understand memory hierarchies:
+
+```python
+with profiler.profile_context("full_epoch"):
+    for batch_idx, batch in enumerate(train_loader):
+        with profiler.profile_context(f"batch_{batch_idx}"):
+            # Forward pass
+            with profiler.profile_context(f"forward_{batch_idx}"):
+                outputs = model(batch["inputs"])
+            
+            # Backward pass
+            with profiler.profile_context(f"backward_{batch_idx}"):
+                loss = criterion(outputs, batch["targets"])
+                loss.backward()
+            
+            optimizer.step()
+```
+
+Each nested context is tracked independently, allowing you to identify which parts of your code consume the most memory.
+
+## TensorFlow context managers
+
+TensorFlow profiling uses the same API:
+
+```python
+from tfmemprof import TFMemoryProfiler
+import tensorflow as tf
+
+profiler = TFMemoryProfiler(enable_tensor_tracking=True)
+
+with profiler.profile_context("tf_inference"):
+    inputs = tf.random.normal((64, 784))
+    logits = model(inputs, training=False)
+    probs = tf.nn.softmax(logits)
+```
+
+See tensorflow_demo.py:48-54
+
+## CPU profiling contexts
+
+Profile CPU memory usage with the same context manager API:
+
+```python
+from gpumemprof import CPUMemoryProfiler
+
+profiler = CPUMemoryProfiler()
+
+with profiler.profile_context("cpu_workload"):
+    # Allocate CPU memory
+    data = [bytearray(1024 * 1024) for _ in range(100)]
+    # Process data
+    result = process_data(data)
+```
+
+See cpu_telemetry_scenario.py:60-64
+
+## Profiled modules
+
+Automatically profile PyTorch module forward passes:
+
+```python
+from gpumemprof.context_profiler import ProfiledModule
+
+# Wrap your model
+model = ProfiledModule(original_model, name="my_model")
+
+# Forward passes are automatically profiled
+output = model(input)  # Profiled as "my_model_forward"
+```
+
+See context_profiler.py:115-143
+
+## Custom profiler instances
+
+Use custom profiler instances for isolated tracking:
+
+```python
+# Create separate profilers for different components
+data_profiler = GPUMemoryProfiler()
+model_profiler = GPUMemoryProfiler()
+
+with data_profiler.profile_context("data_prep"):
+    data = prepare_data()
+
+with model_profiler.profile_context("inference"):
+    outputs = model(data)
+
+# Get separate summaries
+data_summary = data_profiler.get_summary()
+model_summary = model_profiler.get_summary()
+```
+
+This allows you to isolate profiling metrics for different parts of your application.
+
+## Next steps
+
+- Track memory usage over time with [advanced tracking](/examples/leak-detection)
+- Export profiling data with [telemetry export](/examples/telemetry-export)
+- Debug crashes with [OOM recording](/examples/oom-recorder)

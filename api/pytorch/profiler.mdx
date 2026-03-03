@@ -1,0 +1,362 @@
+---
+title: Profiler
+description: Core GPU memory profiler for PyTorch operations
+---
+
+The `profiler` module provides comprehensive GPU memory profiling capabilities for PyTorch operations.
+
+## Classes
+
+### MemorySnapshot
+
+Represents a memory snapshot at a specific point in time.
+
+```python
+from gpumemprof import MemorySnapshot
+```
+
+#### Attributes
+
+<ParamField path="timestamp" type="float">
+  Unix timestamp when the snapshot was taken
+</ParamField>
+
+<ParamField path="allocated_memory" type="int">
+  Allocated GPU memory in bytes
+</ParamField>
+
+<ParamField path="reserved_memory" type="int">
+  Reserved GPU memory in bytes
+</ParamField>
+
+<ParamField path="max_memory_allocated" type="int">
+  Maximum allocated memory since last reset
+</ParamField>
+
+<ParamField path="max_memory_reserved" type="int">
+  Maximum reserved memory since last reset
+</ParamField>
+
+<ParamField path="active_memory" type="int">
+  Active memory in the allocator
+</ParamField>
+
+<ParamField path="inactive_memory" type="int">
+  Inactive memory in the allocator
+</ParamField>
+
+<ParamField path="cpu_memory" type="int">
+  CPU memory usage in bytes
+</ParamField>
+
+<ParamField path="device_id" type="int" default="0">
+  GPU device ID
+</ParamField>
+
+<ParamField path="operation" type="Optional[str]" default="None">
+  Name of the operation when snapshot was taken
+</ParamField>
+
+<ParamField path="stack_trace" type="Optional[str]" default="None">
+  Stack trace at snapshot time (if enabled)
+</ParamField>
+
+#### Methods
+
+##### to_dict()
+
+Convert the snapshot to a dictionary.
+
+```python
+snapshot = MemorySnapshot(...)
+data = snapshot.to_dict()
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Dictionary representation of the snapshot
+</ResponseField>
+
+---
+
+### ProfileResult
+
+Results from profiling a function or operation.
+
+```python
+from gpumemprof import ProfileResult
+```
+
+#### Attributes
+
+<ParamField path="function_name" type="str">
+  Name of the profiled function
+</ParamField>
+
+<ParamField path="execution_time" type="float">
+  Execution time in seconds
+</ParamField>
+
+<ParamField path="memory_before" type="MemorySnapshot">
+  Memory snapshot before execution
+</ParamField>
+
+<ParamField path="memory_after" type="MemorySnapshot">
+  Memory snapshot after execution
+</ParamField>
+
+<ParamField path="memory_peak" type="MemorySnapshot">
+  Peak memory snapshot during execution
+</ParamField>
+
+<ParamField path="memory_allocated" type="int">
+  Total memory allocated during execution
+</ParamField>
+
+<ParamField path="memory_freed" type="int">
+  Total memory freed during execution
+</ParamField>
+
+<ParamField path="tensors_created" type="int">
+  Number of tensors created
+</ParamField>
+
+<ParamField path="tensors_deleted" type="int">
+  Number of tensors deleted
+</ParamField>
+
+<ParamField path="call_count" type="int" default="1">
+  Number of times the function was called
+</ParamField>
+
+#### Methods
+
+##### memory_diff()
+
+Calculate memory difference between before and after.
+
+```python
+result = profiler.profile_function(my_function)
+memory_change = result.memory_diff()
+```
+
+<ResponseField name="return" type="int">
+  Net memory change in bytes
+</ResponseField>
+
+##### peak_memory_usage()
+
+Get peak memory usage during execution.
+
+```python
+peak = result.peak_memory_usage()
+```
+
+<ResponseField name="return" type="int">
+  Peak allocated memory in bytes
+</ResponseField>
+
+##### to_dict()
+
+Convert result to dictionary.
+
+```python
+data = result.to_dict()
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Dictionary representation including all metrics
+</ResponseField>
+
+---
+
+### GPUMemoryProfiler
+
+Comprehensive GPU memory profiler for PyTorch operations.
+
+```python
+from gpumemprof import GPUMemoryProfiler
+
+profiler = GPUMemoryProfiler(device="cuda:0")
+```
+
+#### Constructor
+
+<ParamField path="device" type="Union[str, int, torch.device, None]" default="None">
+  GPU device to profile. If None, auto-detects the current CUDA device
+</ParamField>
+
+<ParamField path="track_tensors" type="bool" default="True">
+  Whether to track tensor creation and deletion
+</ParamField>
+
+<ParamField path="track_cpu_memory" type="bool" default="True">
+  Whether to track CPU memory usage alongside GPU
+</ParamField>
+
+<ParamField path="collect_stack_traces" type="bool" default="False">
+  Whether to collect stack traces for operations (impacts performance)
+</ParamField>
+
+#### Methods
+
+##### profile_function()
+
+Profile a single function call.
+
+```python
+def train_step(model, batch):
+    output = model(batch)
+    return output
+
+result = profiler.profile_function(train_step, model, batch)
+print(f"Memory allocated: {result.memory_allocated / 1024**3:.2f} GB")
+```
+
+<ParamField path="func" type="Callable">
+  Function to profile
+</ParamField>
+
+<ParamField path="*args" type="Any">
+  Arguments to pass to the function
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Keyword arguments to pass to the function
+</ParamField>
+
+<ResponseField name="return" type="ProfileResult">
+  Profiling results including memory and timing information
+</ResponseField>
+
+##### profile_context()
+
+Context manager for profiling a block of code.
+
+```python
+with profiler.profile_context("training_loop"):
+    for batch in dataloader:
+        output = model(batch)
+        loss = criterion(output, labels)
+        loss.backward()
+```
+
+<ParamField path="name" type="str" default="'context'">
+  Name for the profiled context
+</ParamField>
+
+##### start_monitoring()
+
+Start continuous memory monitoring in background.
+
+```python
+profiler.start_monitoring(interval=0.5)
+# ... run your code ...
+profiler.stop_monitoring()
+```
+
+<ParamField path="interval" type="float" default="0.1">
+  Monitoring interval in seconds
+</ParamField>
+
+##### stop_monitoring()
+
+Stop continuous memory monitoring.
+
+```python
+profiler.stop_monitoring()
+```
+
+##### get_summary()
+
+Get a comprehensive summary of all profiling results.
+
+```python
+summary = profiler.get_summary()
+print(f"Peak memory: {summary['peak_memory_usage']}")
+print(f"Total functions profiled: {summary['total_functions_profiled']}")
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Summary statistics including:
+  - `device`: Device being profiled
+  - `total_functions_profiled`: Number of unique functions
+  - `total_function_calls`: Total profiling operations
+  - `peak_memory_usage`: Peak memory usage across all operations
+  - `current_memory_usage`: Current memory state
+  - `function_summaries`: Per-function statistics
+</ResponseField>
+
+##### clear_results()
+
+Clear all profiling results and reset state.
+
+```python
+profiler.clear_results()
+```
+
+#### Context Manager Support
+
+The profiler can be used as a context manager:
+
+```python
+with GPUMemoryProfiler(device="cuda:0") as profiler:
+    profiler.start_monitoring()
+    # ... your code ...
+    summary = profiler.get_summary()
+```
+
+---
+
+### TensorTracker
+
+Tracks tensor creation and deletion for memory profiling.
+
+```python
+from gpumemprof.profiler import TensorTracker
+
+tracker = TensorTracker()
+```
+
+#### Methods
+
+##### count_tensors()
+
+Count current number of tracked tensors.
+
+```python
+count = tracker.count_tensors()
+```
+
+<ResponseField name="return" type="int">
+  Number of CUDA tensors currently in memory
+</ResponseField>
+
+## Example Usage
+
+```python
+import torch
+from gpumemprof import GPUMemoryProfiler
+
+# Initialize profiler
+profiler = GPUMemoryProfiler(device="cuda:0", track_tensors=True)
+
+# Profile a function
+def allocate_tensors(size):
+    return torch.randn(size, size, device="cuda")
+
+result = profiler.profile_function(allocate_tensors, 1000)
+print(f"Execution time: {result.execution_time:.4f}s")
+print(f"Memory allocated: {result.memory_allocated / 1024**2:.2f} MB")
+print(f"Tensors created: {result.tensors_created}")
+
+# Profile a context
+with profiler.profile_context("matrix_operations"):
+    a = torch.randn(1000, 1000, device="cuda")
+    b = torch.randn(1000, 1000, device="cuda")
+    c = torch.matmul(a, b)
+
+# Get summary
+summary = profiler.get_summary()
+for func_name, stats in summary['function_summaries'].items():
+    print(f"{func_name}: {stats['avg_memory_allocated'] / 1024**2:.2f} MB average")
+```

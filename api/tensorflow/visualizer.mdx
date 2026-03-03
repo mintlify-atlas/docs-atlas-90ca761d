@@ -1,0 +1,299 @@
+---
+title: Visualizer
+description: TensorFlow memory visualization with plots, heatmaps, and interactive dashboards
+---
+
+## MemoryVisualizer
+
+Create visualizations and export TensorFlow memory profiling data.
+
+### Constructor
+
+```python
+MemoryVisualizer(
+    style: str = 'default',
+    figure_size: Tuple[int, int] = (12, 8)
+)
+```
+
+<ParamField path="style" type="str" default="default">
+  Matplotlib style to use ('default', 'seaborn', 'ggplot', etc.)
+</ParamField>
+
+<ParamField path="figure_size" type="Tuple[int, int]" default="(12, 8)">
+  Default figure size (width, height) in inches
+</ParamField>
+
+### Methods
+
+#### plot_memory_timeline
+
+Plot memory usage timeline.
+
+```python
+def plot_memory_timeline(
+    self,
+    results: ProfileResult,
+    interactive: bool = False,
+    save_path: Optional[str] = None
+) -> None
+```
+
+<ParamField path="results" type="ProfileResult">
+  Profiling results to visualize
+</ParamField>
+
+<ParamField path="interactive" type="bool" default="False">
+  Create interactive Plotly chart instead of static matplotlib
+</ParamField>
+
+<ParamField path="save_path" type="str" optional>
+  Path to save the plot. Shows plot if None
+</ParamField>
+
+**Example:**
+
+```python
+visualizer = MemoryVisualizer(style='seaborn')
+
+# Static plot
+visualizer.plot_memory_timeline(results, save_path='timeline.png')
+
+# Interactive plot
+visualizer.plot_memory_timeline(
+    results,
+    interactive=True,
+    save_path='timeline.html'
+)
+```
+
+#### plot_function_comparison
+
+Plot function memory usage comparison.
+
+```python
+def plot_function_comparison(
+    self,
+    function_profiles: Dict[str, Dict[str, Any]],
+    save_path: Optional[str] = None
+) -> None
+```
+
+<ParamField path="function_profiles" type="Dict[str, Dict]">
+  Function profiling data from ProfileResult.function_profiles
+</ParamField>
+
+<ParamField path="save_path" type="str" optional>
+  Path to save the plot
+</ParamField>
+
+#### create_memory_heatmap
+
+Create memory usage heatmap.
+
+```python
+def create_memory_heatmap(
+    self,
+    results: ProfileResult,
+    save_path: Optional[str] = None
+) -> None
+```
+
+<ParamField path="results" type="ProfileResult">
+  Profiling results with snapshots
+</ParamField>
+
+<ParamField path="save_path" type="str" optional>
+  Path to save the heatmap
+</ParamField>
+
+#### create_interactive_dashboard
+
+Create interactive Plotly/Dash dashboard.
+
+```python
+def create_interactive_dashboard(
+    self,
+    results: ProfileResult,
+    port: int = 8050
+) -> None
+```
+
+<ParamField path="results" type="ProfileResult">
+  Profiling results to visualize
+</ParamField>
+
+<ParamField path="port" type="int" default="8050">
+  Port to run dashboard server on
+</ParamField>
+
+<Note>
+Requires Plotly and Dash to be installed: `pip install plotly dash`
+</Note>
+
+**Example:**
+
+```python
+# Start interactive dashboard
+visualizer.create_interactive_dashboard(results, port=8050)
+# Navigate to http://localhost:8050 in browser
+```
+
+#### export_data
+
+Export profiling data to file.
+
+```python
+def export_data(
+    self,
+    results: ProfileResult,
+    output_path: str,
+    format: str = 'csv'
+) -> None
+```
+
+<ParamField path="results" type="ProfileResult">
+  Profiling results to export
+</ParamField>
+
+<ParamField path="output_path" type="str">
+  Path to output file
+</ParamField>
+
+<ParamField path="format" type="str" default="csv">
+  Export format: 'csv' or 'json'
+</ParamField>
+
+**Example:**
+
+```python
+# Export as CSV
+visualizer.export_data(results, 'memory_profile.csv', format='csv')
+
+# Export as JSON
+visualizer.export_data(results, 'memory_profile.json', format='json')
+```
+
+#### save_plots
+
+Save all plots to directory.
+
+```python
+def save_plots(
+    self,
+    results: ProfileResult,
+    output_dir: str = "./plots/"
+) -> None
+```
+
+<ParamField path="results" type="ProfileResult">
+  Profiling results
+</ParamField>
+
+<ParamField path="output_dir" type="str" default="./plots/">
+  Directory to save plots. Created if doesn't exist
+</ParamField>
+
+Saves:
+- `timeline.png` - Memory timeline plot
+- `function_comparison.png` - Function comparison bar chart
+- `heatmap.png` - Memory usage heatmap
+
+## Dependencies
+
+The visualizer has optional dependencies:
+
+**Basic plotting:**
+```bash
+pip install matplotlib seaborn
+```
+
+**Interactive dashboards:**
+```bash
+pip install plotly dash
+```
+
+## Example
+
+```python
+from tfmemprof.profiler import TFMemoryProfiler
+from tfmemprof.visualizer import MemoryVisualizer
+import tensorflow as tf
+
+# Profile your code
+profiler = TFMemoryProfiler()
+
+with profiler.profile_context("training"):
+    model = tf.keras.Sequential([
+        tf.keras.layers.Dense(512, activation='relu'),
+        tf.keras.layers.Dense(10)
+    ])
+    model.compile(optimizer='adam', loss='mse')
+    model.fit(x_train, y_train, epochs=5)
+
+results = profiler.get_results()
+
+# Create visualizer
+visualizer = MemoryVisualizer(style='seaborn', figure_size=(14, 8))
+
+# Plot timeline
+visualizer.plot_memory_timeline(results, save_path='memory_timeline.png')
+
+# Plot function comparison
+if results.function_profiles:
+    visualizer.plot_function_comparison(
+        results.function_profiles,
+        save_path='function_comparison.png'
+    )
+
+# Create heatmap
+visualizer.create_memory_heatmap(results, save_path='memory_heatmap.png')
+
+# Save all plots at once
+visualizer.save_plots(results, output_dir='./memory_analysis/')
+
+# Export data for further analysis
+visualizer.export_data(results, 'profile_data.csv', format='csv')
+visualizer.export_data(results, 'profile_data.json', format='json')
+
+# Create interactive dashboard (blocking)
+# visualizer.create_interactive_dashboard(results, port=8050)
+
+# Interactive timeline for exploration
+visualizer.plot_memory_timeline(
+    results,
+    interactive=True,
+    save_path='interactive_timeline.html'
+)
+
+print("Visualizations created successfully!")
+```
+
+## CSV Export Format
+
+The CSV export includes these columns:
+
+- `timestamp` - Unix timestamp
+- `name` - Snapshot name
+- `gpu_memory_mb` - GPU memory in MB
+- `cpu_memory_mb` - CPU memory in MB
+- `num_tensors` - Number of active tensors
+
+## JSON Export Format
+
+```json
+{
+  "peak_memory_mb": 2048.5,
+  "average_memory_mb": 1536.2,
+  "total_allocations": 150,
+  "snapshots": [
+    {
+      "timestamp": 1234567890.123,
+      "name": "training_start",
+      "gpu_memory_mb": 1024.0,
+      "cpu_memory_mb": 512.0,
+      "num_tensors": 42
+    }
+  ]
+}
+```

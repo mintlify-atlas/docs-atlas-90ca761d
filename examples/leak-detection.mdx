@@ -1,0 +1,233 @@
+---
+title: Leak detection
+description: Detect and diagnose memory leaks with real-time tracking
+---
+
+The Memory Tracker provides continuous monitoring and leak detection capabilities to help identify memory issues in your training workflows. This guide shows you how to set up tracking and configure alerts.
+
+## Basic tracker setup
+
+Create a tracker with monitoring enabled:
+
+```python
+from gpumemprof.tracker import MemoryTracker
+import torch
+
+tracker = MemoryTracker(
+    sampling_interval=0.2,
+    max_events=10_000,
+    enable_alerts=True,
+)
+```
+
+See tracking_demo.py:39-46
+
+## Configure leak thresholds
+
+Set thresholds for leak detection:
+
+```python
+# Warn at 65% memory usage
+tracker.set_threshold("memory_warning_percent", 65.0)
+
+# Critical alert at 80% memory usage
+tracker.set_threshold("memory_critical_percent", 80.0)
+
+# Detect leaks when memory grows by 25MB without cleanup
+tracker.set_threshold("memory_leak_threshold", 25 * 1024 * 1024)
+```
+
+See tracking_demo.py:47-49
+
+## Alert callbacks
+
+Register callbacks to handle memory alerts:
+
+```python
+import time
+
+def alert_handler(event):
+    timestamp = time.strftime("%H:%M:%S", time.localtime(event.timestamp))
+    print(f"⚠️  [{timestamp}] {event.event_type.upper()}: {event.context}")
+    
+    for key, value in (event.metadata or {}).items():
+        print(f"    {key}: {value}")
+
+tracker.add_alert_callback(alert_handler)
+```
+
+See tracking_demo.py:32-36
+
+## Start tracking
+
+Begin monitoring memory usage:
+
+```python
+tracker.start_tracking()
+
+try:
+    # Your workload here
+    for step in range(100):
+        # Simulate allocations
+        tensor = torch.randn(1_000_000, device="cuda")
+        # ... training code ...
+        
+        if step % 10 == 0:
+            print(f"Step {step} complete")
+finally:
+    tracker.stop_tracking()
+```
+
+See tracking_demo.py:73-95
+
+## Memory watchdog
+
+Use the watchdog for automatic cleanup:
+
+```python
+from gpumemprof.tracker import MemoryWatchdog
+
+watchdog = MemoryWatchdog(
+    tracker=tracker,
+    auto_cleanup=True,
+    cleanup_threshold=0.75,        # Cleanup at 75% usage
+    aggressive_cleanup_threshold=0.9,  # Aggressive at 90%
+)
+```
+
+See tracking_demo.py:52-57
+
+The watchdog monitors memory usage and triggers cleanup operations:
+- **Standard cleanup**: Calls `torch.cuda.empty_cache()` at 75% usage
+- **Aggressive cleanup**: Forces garbage collection and cache clearing at 90%
+
+## Simulating leaky workloads
+
+Example of tracking a workload with intentional memory leaks:
+
+```python
+import torch
+import time
+
+LEAK_BUCKET = []  # Simulate leak by keeping references
+
+def allocate_leaky_tensor(step, device):
+    size_mb = 16 + (step % 3) * 8
+    elements = int(size_mb * 1024 * 1024 / 4)
+    tensor = torch.randn(elements, device=device)
+    
+    # Leak: keep tensor reference
+    LEAK_BUCKET.append(tensor)
+    
+    # Limit leak size
+    if len(LEAK_BUCKET) > 5:
+        LEAK_BUCKET.pop(0)
+    
+    return tensor
+
+tracker.start_tracking()
+device = torch.device("cuda")
+
+for step in range(100):
+    allocate_leaky_tensor(step, device)
+    
+    # Periodic watchdog cleanup
+    if step % 5 == 0:
+        watchdog.perform_cleanup()
+    
+    time.sleep(0.2)
+
+tracker.stop_tracking()
+```
+
+See tracking_demo.py:61-68 and tracking_demo.py:71-95
+
+## Analyze tracking results
+
+Get statistics after tracking:
+
+```python
+stats = tracker.get_statistics()
+
+print(f"Tracking duration: {stats['tracking_duration_seconds']:.1f}s")
+print(f"Total events: {stats['total_events']}")
+print(f"Peak memory: {stats['peak_memory'] / (1024**3):.2f} GB")
+print(f"Alerts emitted: {stats['alert_count']}")
+
+cleanup_stats = watchdog.get_cleanup_stats()
+print(f"Watchdog cleanups: {cleanup_stats['cleanup_count']}")
+```
+
+See tracking_demo.py:100-110
+
+## Memory timeline
+
+Extract memory usage over time:
+
+```python
+timeline = tracker.get_memory_timeline(interval=0.5)
+
+import matplotlib.pyplot as plt
+
+times = [t - timeline["timestamps"][0] for t in timeline["timestamps"]]
+allocated = [value / (1024**3) for value in timeline["allocated"]]
+
+plt.figure(figsize=(10, 4))
+plt.plot(times, allocated, label="Allocated GB", linewidth=2)
+plt.xlabel("Time (s)")
+plt.ylabel("Allocated memory (GB)")
+plt.title("GPU memory usage over time")
+plt.grid(True, alpha=0.3)
+plt.savefig("memory_timeline.png", dpi=200)
+```
+
+See tracking_demo.py:122-146
+
+## Export tracking events
+
+Export events for analysis:
+
+```python
+from pathlib import Path
+
+output_dir = Path("artifacts/tracking")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+# Export to CSV
+tracker.export_events(str(output_dir / "events.csv"), format="csv")
+
+# Export to JSON
+tracker.export_events(str(output_dir / "events.json"), format="json")
+```
+
+See tracking_demo.py:113-120
+
+## OOM flight recorder
+
+Enable automatic OOM dump capture:
+
+```python
+tracker = MemoryTracker(
+    device=0,
+    sampling_interval=0.1,
+    enable_oom_flight_recorder=True,
+    oom_dump_dir="oom_dumps",
+    oom_max_dumps=3,
+    oom_max_total_mb=128,
+)
+```
+
+See oom_flight_recorder_scenario.py:131-138
+
+When an OOM occurs, the tracker automatically:
+- Captures the last N events leading up to the OOM
+- Records exception details and stack traces
+- Exports a diagnostic bundle for analysis
+
+See the [OOM recorder guide](/examples/oom-recorder) for more details.
+
+## Next steps
+
+- Export tracking data with [telemetry export](/examples/telemetry-export)
+- Debug OOM errors with [OOM recording](/examples/oom-recorder)
+- Learn about [basic profiling](/examples/basic-profiling) for simpler use cases

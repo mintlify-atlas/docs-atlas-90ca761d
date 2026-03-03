@@ -1,0 +1,331 @@
+---
+title: Visualizer
+description: Visualization tools for GPU memory profiling data
+---
+
+The `visualizer` module provides comprehensive visualization capabilities for memory profiling data.
+
+## Classes
+
+### MemoryVisualizer
+
+Comprehensive visualization tool for memory profiling data.
+
+```python
+from gpumemprof import GPUMemoryProfiler
+from gpumemprof.visualizer import MemoryVisualizer
+
+profiler = GPUMemoryProfiler()
+# ... run profiling ...
+
+visualizer = MemoryVisualizer(profiler)
+```
+
+#### Constructor
+
+<ParamField path="profiler" type="Optional[GPUMemoryProfiler]" default="None">
+  GPUMemoryProfiler instance to visualize
+</ParamField>
+
+#### Methods
+
+##### plot_memory_timeline()
+
+Plot memory usage over time.
+
+```python
+# Interactive plot
+fig = visualizer.plot_memory_timeline(interactive=True)
+fig.show()
+
+# Static plot
+fig = visualizer.plot_memory_timeline(
+    interactive=False,
+    save_path="memory_timeline.png"
+)
+```
+
+<ParamField path="results" type="Optional[List[ProfileResult]]" default="None">
+  List of ProfileResults to plot (uses profiler.results if None)
+</ParamField>
+
+<ParamField path="snapshots" type="Optional[List[MemorySnapshot]]" default="None">
+  List of MemorySnapshots to plot (uses profiler.snapshots if None)
+</ParamField>
+
+<ParamField path="save_path" type="Optional[str]" default="None">
+  Path to save the plot
+</ParamField>
+
+<ParamField path="interactive" type="bool" default="True">
+  Whether to create an interactive Plotly plot (True) or static Matplotlib (False)
+</ParamField>
+
+<ResponseField name="return" type="Union[plt.Figure, go.Figure]">
+  Matplotlib or Plotly figure object
+</ResponseField>
+
+##### plot_function_comparison()
+
+Compare memory usage across different functions.
+
+```python
+# Compare by memory allocated
+fig = visualizer.plot_function_comparison(
+    metric="memory_allocated",
+    interactive=True
+)
+
+# Compare by execution time
+fig = visualizer.plot_function_comparison(
+    metric="execution_time",
+    save_path="function_times.png"
+)
+
+# Compare by peak memory
+fig = visualizer.plot_function_comparison(
+    metric="peak_memory",
+    interactive=False
+)
+```
+
+<ParamField path="results" type="Optional[List[ProfileResult]]" default="None">
+  List of ProfileResults to compare
+</ParamField>
+
+<ParamField path="metric" type="str" default="'memory_allocated'">
+  Metric to compare: 'memory_allocated', 'execution_time', or 'peak_memory'
+</ParamField>
+
+<ParamField path="save_path" type="Optional[str]" default="None">
+  Path to save the plot
+</ParamField>
+
+<ParamField path="interactive" type="bool" default="True">
+  Whether to create interactive plot
+</ParamField>
+
+<ResponseField name="return" type="Union[plt.Figure, go.Figure]">
+  Matplotlib or Plotly figure
+</ResponseField>
+
+##### plot_memory_heatmap()
+
+Create a heatmap showing memory usage patterns.
+
+```python
+fig = visualizer.plot_memory_heatmap(
+    save_path="memory_heatmap.png"
+)
+```
+
+<ParamField path="results" type="Optional[List[ProfileResult]]" default="None">
+  List of ProfileResults to analyze
+</ParamField>
+
+<ParamField path="save_path" type="Optional[str]" default="None">
+  Path to save the heatmap
+</ParamField>
+
+<ResponseField name="return" type="plt.Figure">
+  Matplotlib figure with heatmap
+</ResponseField>
+
+##### create_dashboard()
+
+Create a comprehensive dashboard with multiple visualizations.
+
+```python
+dashboard = visualizer.create_dashboard(
+    save_path="dashboard.html"
+)
+dashboard.show()
+```
+
+<ParamField path="results" type="Optional[List[ProfileResult]]" default="None">
+  List of ProfileResults
+</ParamField>
+
+<ParamField path="snapshots" type="Optional[List[MemorySnapshot]]" default="None">
+  List of MemorySnapshots
+</ParamField>
+
+<ParamField path="save_path" type="Optional[str]" default="None">
+  Path to save the dashboard (HTML format)
+</ParamField>
+
+<ResponseField name="return" type="go.Figure">
+  Plotly figure with multiple subplots:
+  - Memory timeline
+  - Function comparison
+  - Memory distribution histogram
+  - Execution time vs peak memory scatter
+</ResponseField>
+
+##### export_data()
+
+Export profiling data to various formats.
+
+```python
+# Export as CSV
+path = visualizer.export_data(
+    format="csv",
+    save_path="memory_profile"
+)
+# Creates: memory_profile_results_TIMESTAMP.csv
+#          memory_profile_snapshots_TIMESTAMP.csv
+
+# Export as JSON
+path = visualizer.export_data(
+    format="json",
+    save_path="profile_data"
+)
+```
+
+<ParamField path="results" type="Optional[List[ProfileResult]]" default="None">
+  List of ProfileResults to export
+</ParamField>
+
+<ParamField path="snapshots" type="Optional[List[MemorySnapshot]]" default="None">
+  List of MemorySnapshots to export
+</ParamField>
+
+<ParamField path="format" type="str" default="'csv'">
+  Export format: 'csv' or 'json'
+</ParamField>
+
+<ParamField path="save_path" type="str" default="'memory_profile_data'">
+  Base path for saved files (timestamp will be appended)
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Path to saved file
+</ResponseField>
+
+##### show()
+
+Display a figure.
+
+```python
+fig = visualizer.plot_memory_timeline()
+visualizer.show(fig)
+```
+
+<ParamField path="fig" type="Union[plt.Figure, go.Figure]">
+  Figure to display
+</ParamField>
+
+#### Style Configuration
+
+Customize visualization style:
+
+```python
+visualizer.style_config['figure_size'] = (14, 10)
+visualizer.style_config['dpi'] = 150
+visualizer.style_config['color_palette'] = 'plasma'
+visualizer.style_config['font_size'] = 12
+```
+
+Available style options:
+- `figure_size`: Tuple of (width, height) in inches (default: (12, 8))
+- `dpi`: Resolution in dots per inch (default: 100)
+- `color_palette`: Seaborn color palette name (default: 'viridis')
+- `font_size`: Base font size (default: 10)
+- `title_size`: Title font size (default: 14)
+- `label_size`: Axis label font size (default: 12)
+
+## Example Usage
+
+```python
+import torch
+from gpumemprof import GPUMemoryProfiler
+from gpumemprof.visualizer import MemoryVisualizer
+
+# Run profiling
+profiler = GPUMemoryProfiler(device="cuda:0")
+profiler.start_monitoring(interval=0.1)
+
+for epoch in range(5):
+    with profiler.profile_context(f"epoch_{epoch}"):
+        model.train()
+        for batch in dataloader:
+            output = model(batch)
+            loss = criterion(output)
+            loss.backward()
+
+profiler.stop_monitoring()
+
+# Create visualizer
+visualizer = MemoryVisualizer(profiler)
+
+# 1. Memory timeline
+timeline_fig = visualizer.plot_memory_timeline(
+    interactive=True,
+    save_path="timeline.html"
+)
+timeline_fig.show()
+
+# 2. Function comparison
+comparison_fig = visualizer.plot_function_comparison(
+    metric="memory_allocated",
+    save_path="function_comparison.png"
+)
+
+# 3. Memory heatmap
+heatmap_fig = visualizer.plot_memory_heatmap(
+    save_path="memory_heatmap.png"
+)
+
+# 4. Comprehensive dashboard
+dashboard = visualizer.create_dashboard(
+    save_path="profiling_dashboard.html"
+)
+dashboard.show()
+
+# 5. Export raw data
+visualizer.export_data(
+    format="csv",
+    save_path="profile_data"
+)
+
+visualizer.export_data(
+    format="json",
+    save_path="profile_data"
+)
+
+# 6. Customize style
+visualizer.style_config['figure_size'] = (16, 10)
+visualizer.style_config['color_palette'] = 'coolwarm'
+
+# Create new plots with custom style
+custom_fig = visualizer.plot_memory_timeline(interactive=False)
+```
+
+## Visualization Types
+
+### Memory Timeline
+
+Shows allocated and reserved memory over time with operation labels.
+
+### Function Comparison
+
+Bar chart comparing functions by:
+- Average memory allocated
+- Average execution time
+- Peak memory usage
+
+### Memory Heatmap
+
+Normalized heatmap showing:
+- Execution time per function
+- Memory allocated per function
+- Memory freed per function
+- Peak memory per function
+
+### Dashboard
+
+Combined view with:
+- Memory timeline
+- Function memory comparison
+- Memory distribution histogram
+- Execution time vs peak memory scatter plot

@@ -1,0 +1,389 @@
+---
+title: tfmemprof
+description: CLI reference for the tfmemprof command-line interface
+---
+
+The `tfmemprof` command provides TensorFlow GPU memory profiling and analysis tools.
+
+## Installation
+
+Install the package with TensorFlow support:
+
+```bash
+pip install gpu-memory-profiler
+pip install 'gpu-memory-profiler[tf]'  # TensorFlow support
+pip install 'gpu-memory-profiler[viz]'  # Visualization support
+```
+
+## Global usage
+
+```bash
+tfmemprof <command> [options]
+```
+
+**Global options:**
+
+- `-v, --verbose` - Enable verbose logging
+
+## Commands
+
+### info
+
+Display system and GPU information for TensorFlow.
+
+```bash
+tfmemprof info [-v]
+```
+
+**Example:**
+
+```bash
+# Show basic system info
+tfmemprof info
+
+# Show with verbose logging
+tfmemprof info -v
+```
+
+**Output example:**
+
+```
+TensorFlow Memory Profiler - System Information
+==================================================
+Platform: Linux
+Python Version: 3.10.12
+TensorFlow Version: 2.15.0
+CPU Count: 16
+Total System Memory: 64.00 GB
+Available Memory: 52.34 GB
+
+GPU Information:
+--------------------
+GPU Available: Yes
+GPU Count: 2
+Total GPU Memory: 48.00 GB
+
+GPU 0:
+  Name: NVIDIA A100-SXM4-40GB
+  Current Memory: 0.0 MB
+  Peak Memory: 0.0 MB
+
+GPU 1:
+  Name: NVIDIA A100-SXM4-40GB
+  Current Memory: 0.0 MB
+  Peak Memory: 0.0 MB
+
+TensorFlow Backend Diagnostics:
+------------------------------
+Hardware GPU Detected: True
+Runtime Backend: cuda
+Runtime GPU Count: 2
+Apple Silicon: False
+tensorflow-metal Installed: False
+CUDA Build: True
+ROCm Build: False
+TensorRT Build: True
+
+TensorFlow Build Information:
+------------------------------
+CUDA Build: True
+CUDA Version: 12.2
+cuDNN Version: 8.9
+```
+
+### monitor
+
+Monitor GPU memory usage in real-time.
+
+```bash
+tfmemprof monitor [--interval INTERVAL] [--duration DURATION] [--threshold THRESHOLD] 
+                  [--device DEVICE] [--output OUTPUT] [-v]
+```
+
+**Options:**
+
+- `--interval INTERVAL` - Sampling interval in seconds (default: 1.0)
+- `--duration DURATION` - Monitoring duration in seconds (default: indefinite)
+- `--threshold THRESHOLD` - Memory alert threshold in MB
+- `--device DEVICE` - TensorFlow device to monitor (default: /GPU:0)
+- `--output OUTPUT` - Output file for results
+- `-v, --verbose` - Enable verbose logging
+
+**Example:**
+
+```bash
+# Monitor with default settings
+tfmemprof monitor
+
+# Monitor for 60 seconds with 0.5s interval
+tfmemprof monitor --interval 0.5 --duration 60
+
+# Monitor with alert threshold
+tfmemprof monitor --interval 1.0 --threshold 8000 --output monitoring.json
+
+# Monitor specific device
+tfmemprof monitor --device /GPU:1 --duration 30 --output gpu1_monitor.json
+```
+
+**Output example:**
+
+```
+Starting TensorFlow memory monitoring...
+Sampling interval: 1.0 seconds
+Duration: 60 seconds
+Alert threshold: 4000 MB
+Press Ctrl+C to stop
+
+Current memory usage: 245.3 MB
+Current memory usage: 1024.7 MB
+Current memory usage: 2048.2 MB
+
+Stopping monitoring...
+
+Monitoring Results:
+--------------------
+Peak Memory: 2048.2 MB
+Average Memory: 1106.1 MB
+Duration: 60.0 seconds
+Samples Collected: 60
+Alerts Triggered: 0
+Results saved to monitoring.json
+```
+
+### track
+
+Start background memory tracking with alert callbacks.
+
+```bash
+tfmemprof track --output OUTPUT [--interval INTERVAL] [--threshold THRESHOLD] 
+                [--device DEVICE] [-v]
+```
+
+**Options:**
+
+- `--output OUTPUT` - Output file for tracking results (required)
+- `--interval INTERVAL` - Sampling interval in seconds (default: 1.0)
+- `--threshold THRESHOLD` - Memory alert threshold in MB (default: 4000)
+- `--device DEVICE` - TensorFlow device to monitor (default: /GPU:0)
+- `-v, --verbose` - Enable verbose logging
+
+**Example:**
+
+```bash
+# Track with default settings
+tfmemprof track --output tracking.json
+
+# Track with custom threshold and interval
+tfmemprof track --interval 0.5 --threshold 8000 --output tracking.json
+
+# Track specific device with verbose output
+tfmemprof track --device /GPU:1 --output track_gpu1.json -v
+```
+
+**Output example:**
+
+```
+Starting background memory tracking...
+Tracking started. Press Ctrl+C to stop and save results.
+Current memory: 128.5 MB
+Current memory: 512.3 MB
+⚠️  MEMORY ALERT: Memory usage exceeded 4000 MB threshold
+Current memory: 4523.7 MB
+
+Stopping tracking...
+Results saved to tracking.json
+
+Tracking completed. Peak memory: 4523.7 MB
+```
+
+### analyze
+
+Analyze profiling results from previous sessions.
+
+```bash
+tfmemprof analyze --input INPUT [--detect-leaks] [--optimize] [--visualize] 
+                  [--report REPORT] [-v]
+```
+
+**Options:**
+
+- `--input INPUT` - Input file with profiling results (required)
+- `--detect-leaks` - Detect memory leaks
+- `--optimize` - Generate optimization recommendations
+- `--visualize` - Generate visualization plots
+- `--report REPORT` - Generate comprehensive report file
+- `-v, --verbose` - Enable verbose logging
+
+**Example:**
+
+```bash
+# Basic analysis
+tfmemprof analyze --input monitoring.json
+
+# Leak detection
+tfmemprof analyze --input tracking.json --detect-leaks
+
+# Full analysis with optimization and visualization
+tfmemprof analyze --input tracking.json --detect-leaks --optimize --visualize
+
+# Generate comprehensive report
+tfmemprof analyze --input tracking.json --detect-leaks --optimize --report full_report.txt
+```
+
+**Output example:**
+
+```
+Analyzing results from tracking.json...
+
+Basic Analysis:
+---------------
+Peak Memory: 4.42 GB
+Average Memory: 2.15 GB
+Duration: 120.00 seconds
+Memory Allocations: 45
+Memory Deallocations: 38
+
+Memory Leak Analysis:
+----------------------
+⚠️  Potential memory leaks detected:
+  - Steady Growth: Memory grows steadily without deallocation (Severity: medium)
+  - High Retention: Peak memory 2.3x higher than average (Severity: low)
+
+Optimization Analysis:
+----------------------
+Overall Score: 6.5/10
+
+Category Scores:
+  Memory Efficiency: 6.2/10
+  Allocation Pattern: 7.1/10
+  Peak Usage: 5.8/10
+  Memory Growth: 6.3/10
+
+Top Recommendations:
+  1. Consider implementing memory pooling to reduce fragmentation
+  2. Review allocation patterns for potential optimization
+  3. Monitor peak memory usage during critical operations
+
+Generating visualizations...
+✅ Timeline plot saved as memory_timeline.png
+
+Generating comprehensive report...
+✅ Report saved to full_report.txt
+```
+
+### diagnose
+
+Produce a portable diagnostic bundle for debugging memory failures.
+
+```bash
+tfmemprof diagnose [--output OUTPUT] [--device DEVICE] [--duration DURATION] 
+                   [--interval INTERVAL] [-v]
+```
+
+**Options:**
+
+- `--output OUTPUT` - Output directory for the artifact bundle (default: current working directory)
+- `--device DEVICE` - TensorFlow device to monitor (default: /GPU:0)
+- `--duration DURATION` - Seconds to run tracker for telemetry (default: 5, use 0 to skip)
+- `--interval INTERVAL` - Sampling interval for timeline (default: 0.5)
+- `-v, --verbose` - Enable verbose logging
+
+**Exit codes:**
+
+- `0` - Success, no memory risk detected
+- `1` - Runtime or argument failure
+- `2` - Success with memory risk detected
+
+**Example:**
+
+```bash
+# Quick diagnostic (no telemetry collection)
+tfmemprof diagnose --duration 0 --output ./diagnostics
+
+# Full diagnostic with 5 seconds of telemetry
+tfmemprof diagnose --duration 5 --interval 0.5 --output ./tf_diag
+
+# Diagnostic for specific device with verbose output
+tfmemprof diagnose --device /GPU:1 --output ./diag_gpu1 -v
+```
+
+**Output example:**
+
+```
+Artifact: /path/to/diagnostics/tfmemprof_diag_20260303_142530
+Status: OK (exit_code=0)
+Findings: no memory risk detected
+```
+
+Or with risk detected:
+
+```
+Artifact: /path/to/diagnostics/tfmemprof_diag_20260303_142530
+Status: MEMORY_RISK (exit_code=2)
+Findings: high_memory_growth, leak_suspected
+```
+
+## TensorFlow device notation
+
+TensorFlow uses a specific device notation:
+
+- `/GPU:0` - First GPU device (default)
+- `/GPU:1` - Second GPU device
+- `/CPU:0` - CPU device
+
+The `--device` flag accepts this notation.
+
+## Backend support
+
+The `tfmemprof` CLI supports multiple TensorFlow backends:
+
+- **CUDA** - NVIDIA GPUs with CUDA support
+- **ROCm** - AMD GPUs with ROCm support
+- **Metal** - Apple Silicon with tensorflow-metal
+- **CPU** - Fallback for systems without GPU support
+
+On Apple Silicon, install `tensorflow-metal` to enable GPU acceleration:
+
+```bash
+pip install tensorflow-metal
+```
+
+## Common workflows
+
+### Quick system check
+
+```bash
+tfmemprof info
+```
+
+### Monitor training session
+
+```bash
+tfmemprof track --interval 0.5 --threshold 8000 --output training_track.json
+```
+
+### Analyze and optimize
+
+```bash
+tfmemprof analyze --input training_track.json --detect-leaks --optimize --visualize --report analysis.txt
+```
+
+### Debug memory issues
+
+```bash
+tfmemprof diagnose --duration 5 --output ./tf_diagnostics
+```
+
+## Integration with gpumemprof
+
+For comprehensive profiling across both frameworks:
+
+```bash
+# Collect data from both tools
+gpumemprof track --duration 60 --output pytorch_track.json --format json
+tfmemprof track --duration 60 --output tf_track.json
+
+# Generate diagnostics from both
+gpumemprof diagnose --output ./pytorch_diag
+tfmemprof diagnose --output ./tf_diag
+```

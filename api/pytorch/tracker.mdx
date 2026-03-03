@@ -1,0 +1,469 @@
+---
+title: Tracker
+description: Real-time memory tracking and monitoring with alerts
+---
+
+The `tracker` module provides real-time memory tracking with alerts, OOM detection, and event logging.
+
+## Classes
+
+### TrackingEvent
+
+Represents a memory tracking event.
+
+```python
+from gpumemprof import TrackingEvent
+```
+
+#### Attributes
+
+<ParamField path="timestamp" type="float">
+  Unix timestamp of the event
+</ParamField>
+
+<ParamField path="event_type" type="str">
+  Event type: 'allocation', 'deallocation', 'peak', 'warning', 'error', 'critical'
+</ParamField>
+
+<ParamField path="memory_allocated" type="int">
+  Allocated memory in bytes at event time
+</ParamField>
+
+<ParamField path="memory_reserved" type="int">
+  Reserved memory in bytes at event time
+</ParamField>
+
+<ParamField path="memory_change" type="int">
+  Memory change in bytes (positive for allocation, negative for deallocation)
+</ParamField>
+
+<ParamField path="device_id" type="int">
+  GPU device ID
+</ParamField>
+
+<ParamField path="context" type="Optional[str]" default="None">
+  Contextual information about the event
+</ParamField>
+
+<ParamField path="metadata" type="Optional[Dict[str, Any]]" default="None">
+  Additional metadata
+</ParamField>
+
+<ParamField path="active_memory" type="Optional[int]" default="None">
+  Active memory in allocator
+</ParamField>
+
+<ParamField path="inactive_memory" type="Optional[int]" default="None">
+  Inactive memory in allocator
+</ParamField>
+
+<ParamField path="device_used" type="Optional[int]" default="None">
+  Device memory used
+</ParamField>
+
+<ParamField path="device_free" type="Optional[int]" default="None">
+  Device memory free
+</ParamField>
+
+<ParamField path="device_total" type="Optional[int]" default="None">
+  Total device memory
+</ParamField>
+
+<ParamField path="backend" type="str" default="'cuda'">
+  Backend type (cuda, rocm, mps)
+</ParamField>
+
+---
+
+### MemoryTracker
+
+Real-time memory tracker with alerts and monitoring.
+
+```python
+from gpumemprof import MemoryTracker
+
+tracker = MemoryTracker(
+    device="cuda:0",
+    sampling_interval=0.1,
+    enable_alerts=True,
+    enable_oom_flight_recorder=True
+)
+```
+
+#### Constructor
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to track. Auto-detects if None
+</ParamField>
+
+<ParamField path="sampling_interval" type="float" default="0.1">
+  Sampling interval in seconds for continuous tracking
+</ParamField>
+
+<ParamField path="max_events" type="int" default="10000">
+  Maximum number of events to keep in memory (ring buffer)
+</ParamField>
+
+<ParamField path="enable_alerts" type="bool" default="True">
+  Whether to enable memory threshold alerts
+</ParamField>
+
+<ParamField path="enable_oom_flight_recorder" type="bool" default="False">
+  Enable automatic OOM dump artifacts
+</ParamField>
+
+<ParamField path="oom_dump_dir" type="str" default="'oom_dumps'">
+  Directory for OOM dump bundles
+</ParamField>
+
+<ParamField path="oom_buffer_size" type="Optional[int]" default="None">
+  Event ring-buffer size for OOM dumps (defaults to max_events)
+</ParamField>
+
+<ParamField path="oom_max_dumps" type="int" default="5">
+  Maximum number of retained OOM dump bundles
+</ParamField>
+
+<ParamField path="oom_max_total_mb" type="int" default="256">
+  Maximum total storage for OOM dumps in MB
+</ParamField>
+
+#### Methods
+
+##### start_tracking()
+
+Start real-time memory tracking.
+
+```python
+tracker.start_tracking()
+# ... run your code ...
+tracker.stop_tracking()
+```
+
+##### stop_tracking()
+
+Stop real-time memory tracking.
+
+```python
+tracker.stop_tracking()
+```
+
+##### handle_exception()
+
+Capture OOM diagnostics for recognized OOM exceptions.
+
+```python
+try:
+    model = LargeModel().cuda()
+except Exception as e:
+    dump_path = tracker.handle_exception(e, context="model_loading")
+    if dump_path:
+        print(f"OOM dump saved to: {dump_path}")
+    raise
+```
+
+<ParamField path="exc" type="BaseException">
+  Exception to analyze
+</ParamField>
+
+<ParamField path="context" type="Optional[str]" default="None">
+  Context description
+</ParamField>
+
+<ParamField path="metadata" type="Optional[Dict[str, Any]]" default="None">
+  Additional metadata to include in dump
+</ParamField>
+
+<ResponseField name="return" type="Optional[str]">
+  Path to the OOM dump directory if created, None otherwise
+</ResponseField>
+
+##### capture_oom()
+
+Context manager to capture OOM diagnostics.
+
+```python
+with tracker.capture_oom(context="training", metadata={"batch_size": 32}):
+    output = model(large_batch)
+```
+
+<ParamField path="context" type="str" default="'runtime'">
+  Context description
+</ParamField>
+
+<ParamField path="metadata" type="Optional[Dict[str, Any]]" default="None">
+  Additional metadata
+</ParamField>
+
+##### add_alert_callback()
+
+Add a callback function to be called on alerts.
+
+```python
+def my_alert_handler(event: TrackingEvent):
+    print(f"Alert: {event.context}")
+
+tracker.add_alert_callback(my_alert_handler)
+```
+
+<ParamField path="callback" type="Callable[[TrackingEvent], None]">
+  Function to call when alerts are triggered
+</ParamField>
+
+##### remove_alert_callback()
+
+Remove an alert callback.
+
+```python
+tracker.remove_alert_callback(my_alert_handler)
+```
+
+##### get_events()
+
+Get tracking events with optional filtering.
+
+```python
+# Get all events
+events = tracker.get_events()
+
+# Get only warnings
+warnings = tracker.get_events(event_type="warning")
+
+# Get last 100 events
+recent = tracker.get_events(last_n=100)
+
+# Get events since timestamp
+import time
+events = tracker.get_events(since=time.time() - 3600)
+```
+
+<ParamField path="event_type" type="Optional[str]" default="None">
+  Filter by event type
+</ParamField>
+
+<ParamField path="last_n" type="Optional[int]" default="None">
+  Get last N events
+</ParamField>
+
+<ParamField path="since" type="Optional[float]" default="None">
+  Get events since timestamp
+</ParamField>
+
+<ResponseField name="return" type="List[TrackingEvent]">
+  Filtered list of tracking events
+</ResponseField>
+
+##### get_memory_timeline()
+
+Get memory usage timeline with specified interval.
+
+```python
+timeline = tracker.get_memory_timeline(interval=1.0)
+print(f"Timestamps: {timeline['timestamps']}")
+print(f"Allocated: {timeline['allocated']}")
+```
+
+<ParamField path="interval" type="float" default="1.0">
+  Time interval in seconds for aggregation
+</ParamField>
+
+<ResponseField name="return" type="Dict[str, List]">
+  Dictionary with 'timestamps', 'allocated', and 'reserved' lists
+</ResponseField>
+
+##### get_statistics()
+
+Get comprehensive tracking statistics.
+
+```python
+stats = tracker.get_statistics()
+print(f"Peak memory: {stats['peak_memory']}")
+print(f"Total events: {stats['total_events']}")
+print(f"Backend: {stats['backend']}")
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Statistics including peak memory, event counts, backend info, and OOM recorder status
+</ResponseField>
+
+##### export_events()
+
+Export tracking events to file.
+
+```python
+# Export as CSV
+tracker.export_events("memory_events.csv", format="csv")
+
+# Export as JSON
+tracker.export_events("memory_events.json", format="json")
+```
+
+<ParamField path="filename" type="str">
+  Output filename
+</ParamField>
+
+<ParamField path="format" type="str" default="'csv'">
+  Export format: 'csv' or 'json'
+</ParamField>
+
+##### clear_events()
+
+Clear all tracking events.
+
+```python
+tracker.clear_events()
+```
+
+##### set_threshold()
+
+Set alert threshold.
+
+```python
+tracker.set_threshold("memory_warning_percent", 85.0)
+tracker.set_threshold("memory_critical_percent", 97.0)
+```
+
+<ParamField path="threshold_name" type="str">
+  Name of the threshold to set
+</ParamField>
+
+<ParamField path="value" type="Union[int, float]">
+  Threshold value
+</ParamField>
+
+Available thresholds:
+- `memory_warning_percent`: Warn at this % of total memory (default: 80.0)
+- `memory_critical_percent`: Critical at this % of total memory (default: 95.0)
+- `memory_leak_threshold`: Memory growth in bytes to flag as leak (default: 100MB)
+- `fragmentation_threshold`: Fragmentation ratio to warn (default: 0.3)
+
+##### get_alerts()
+
+Get all alert events.
+
+```python
+# Get all alerts
+alerts = tracker.get_alerts()
+
+# Get last 10 alerts
+recent_alerts = tracker.get_alerts(last_n=10)
+```
+
+<ParamField path="last_n" type="Optional[int]" default="None">
+  Get last N alerts only
+</ParamField>
+
+<ResponseField name="return" type="List[TrackingEvent]">
+  List of alert events (warnings, critical, errors)
+</ResponseField>
+
+#### Context Manager Support
+
+```python
+with MemoryTracker(device="cuda:0") as tracker:
+    # Tracking starts automatically
+    model.train()
+    # Tracking stops automatically on exit
+```
+
+---
+
+### MemoryWatchdog
+
+Memory watchdog for automated memory management.
+
+```python
+from gpumemprof import MemoryWatchdog
+
+tracker = MemoryTracker()
+watchdog = MemoryWatchdog(
+    tracker=tracker,
+    auto_cleanup=True,
+    cleanup_threshold=0.9,
+    aggressive_cleanup_threshold=0.95
+)
+```
+
+#### Constructor
+
+<ParamField path="tracker" type="MemoryTracker">
+  MemoryTracker instance to monitor
+</ParamField>
+
+<ParamField path="auto_cleanup" type="bool" default="True">
+  Whether to automatically clean up memory on alerts
+</ParamField>
+
+<ParamField path="cleanup_threshold" type="float" default="0.9">
+  Memory usage threshold (0-1) to trigger cleanup
+</ParamField>
+
+<ParamField path="aggressive_cleanup_threshold" type="float" default="0.95">
+  Threshold for aggressive cleanup including garbage collection
+</ParamField>
+
+#### Methods
+
+##### force_cleanup()
+
+Force immediate memory cleanup.
+
+```python
+watchdog.force_cleanup(aggressive=True)
+```
+
+<ParamField path="aggressive" type="bool" default="False">
+  Whether to perform aggressive cleanup (includes gc.collect())
+</ParamField>
+
+##### get_cleanup_stats()
+
+Get cleanup statistics.
+
+```python
+stats = watchdog.get_cleanup_stats()
+print(f"Cleanups performed: {stats['cleanup_count']}")
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Statistics about cleanup operations
+</ResponseField>
+
+## Example Usage
+
+```python
+import torch
+from gpumemprof import MemoryTracker, MemoryWatchdog
+
+# Create tracker with OOM recording
+tracker = MemoryTracker(
+    device="cuda:0",
+    sampling_interval=0.5,
+    enable_oom_flight_recorder=True,
+    oom_dump_dir="./oom_diagnostics"
+)
+
+# Add watchdog for automatic cleanup
+watchdog = MemoryWatchdog(tracker, auto_cleanup=True)
+
+# Start tracking
+tracker.start_tracking()
+
+try:
+    with tracker.capture_oom(context="training"):
+        model = MyModel().cuda()
+        for batch in dataloader:
+            output = model(batch)
+except torch.cuda.OutOfMemoryError as e:
+    print(f"OOM dump location: {tracker.last_oom_dump_path}")
+    raise
+finally:
+    tracker.stop_tracking()
+
+# Analyze results
+stats = tracker.get_statistics()
+print(f"Peak memory: {stats['peak_memory'] / 1024**3:.2f} GB")
+
+# Export events for analysis
+tracker.export_events("memory_timeline.csv")
+```

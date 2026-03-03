@@ -1,0 +1,165 @@
+---
+title: Basic profiling
+description: Get started with GPU memory profiling in PyTorch and TensorFlow
+---
+
+The GPU Memory Profiler provides simple APIs to profile memory usage in your deep learning workflows. This guide shows you how to get started with basic profiling in both PyTorch and TensorFlow.
+
+## PyTorch profiling
+
+### Basic setup
+
+Import the profiler and create an instance:
+
+```python
+from gpumemprof import GPUMemoryProfiler
+
+profiler = GPUMemoryProfiler(track_tensors=True)
+```
+
+### Profile function calls
+
+Use `profile_function()` to measure memory usage of any callable:
+
+```python
+import torch
+
+def allocate_tensor(size_mb, device):
+    elements = int(size_mb * 1024 * 1024 / 4)
+    rows = max(1, elements // 1024)
+    tensor = torch.randn(rows, 1024, device=device)
+    return tensor.mean().item()
+
+device = torch.device("cuda")
+
+# Profile multiple allocations
+for idx in range(3):
+    size_mb = 32 * (idx + 1)
+    
+    def allocate(sz=size_mb, dev=device):
+        return allocate_tensor(sz, dev)
+    
+    allocate.__name__ = f"tensor_alloc_{size_mb}mb"
+    profiler.profile_function(allocate)
+```
+
+### Profile training loops
+
+Wrap training epochs with `profile_context()` to track memory during training:
+
+```python
+import torch.nn as nn
+
+model = nn.Sequential(
+    nn.Linear(784, 256),
+    nn.ReLU(),
+    nn.Linear(256, 10)
+).cuda()
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+criterion = nn.CrossEntropyLoss()
+
+for epoch in range(2):
+    with profiler.profile_context(f"epoch_{epoch+1}"):
+        # Your training step here
+        inputs = torch.randn(32, 784, device="cuda")
+        targets = torch.randint(0, 10, (32,), device="cuda")
+        
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+        loss.backward()
+        optimizer.step()
+```
+
+See pytorch_demo.py:53-62
+
+### Get profiling results
+
+Retrieve a summary of all profiled operations:
+
+```python
+summary = profiler.get_summary()
+
+print(f"Total operations profiled: {len(summary['results'])}")
+print(f"Peak memory: {summary['peak_memory_mb']:.2f} MB")
+print(f"Average memory: {summary['average_memory_mb']:.2f} MB")
+```
+
+## TensorFlow profiling
+
+### Basic setup
+
+Import the TensorFlow-specific profiler:
+
+```python
+import tensorflow as tf
+from tfmemprof import TFMemoryProfiler
+
+profiler = TFMemoryProfiler(enable_tensor_tracking=True)
+```
+
+### Profile with decorator
+
+Use the `@profile_function` decorator:
+
+```python
+@profiler.profile_function
+def allocate_batch():
+    inputs = tf.random.normal((128, 784))
+    targets = tf.random.uniform((128,), maxval=10, dtype=tf.int32)
+    return float(inputs.numpy().mean())
+
+allocate_batch()
+```
+
+See tensorflow_demo.py:31-38
+
+### Profile training steps
+
+Wrap training iterations with context managers:
+
+```python
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(256, activation='relu'),
+    tf.keras.layers.Dense(10)
+])
+
+optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
+loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+
+for epoch in range(2):
+    with profiler.profile_context(f"tf_epoch_{epoch+1}"):
+        inputs = tf.random.normal((32, 784))
+        targets = tf.random.uniform((32,), maxval=10, dtype=tf.int32)
+        
+        with tf.GradientTape() as tape:
+            predictions = model(inputs, training=True)
+            loss = loss_fn(targets, predictions)
+        
+        gradients = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+```
+
+See tensorflow_demo.py:41-45
+
+### Get profiling results
+
+Retrieve profiling results:
+
+```python
+results = profiler.get_results()
+
+print(f"Duration: {results.duration:.3f}s")
+print(f"Peak memory: {results.peak_memory_mb:.2f} MB")
+print(f"Average memory: {results.average_memory_mb:.2f} MB")
+print(f"Snapshots captured: {len(results.snapshots)}")
+```
+
+See tensorflow_demo.py:57-62
+
+## Next steps
+
+- Learn about [context managers](/examples/context-managers) for flexible profiling
+- Explore [leak detection](/examples/leak-detection) to identify memory issues
+- Set up [OOM recording](/examples/oom-recorder) to debug out-of-memory errors

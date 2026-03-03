@@ -1,0 +1,281 @@
+---
+title: Tracker
+description: Real-time TensorFlow memory tracking with alerts and automatic cleanup
+---
+
+## MemoryTracker
+
+Real-time TensorFlow GPU memory tracker with configurable sampling and alerts.
+
+### Constructor
+
+```python
+MemoryTracker(
+    sampling_interval: float = 1.0,
+    alert_threshold_mb: Optional[float] = None,
+    device: Optional[str] = None,
+    enable_logging: bool = True
+)
+```
+
+<ParamField path="sampling_interval" type="float" default="1.0">
+  Time between memory samples in seconds
+</ParamField>
+
+<ParamField path="alert_threshold_mb" type="float" optional>
+  Memory threshold for triggering alerts in MB
+</ParamField>
+
+<ParamField path="device" type="str" optional>
+  TensorFlow device to monitor (e.g., '/GPU:0'). Defaults to '/GPU:0'
+</ParamField>
+
+<ParamField path="enable_logging" type="bool" default="True">
+  Whether to log tracking events
+</ParamField>
+
+### Methods
+
+#### start_tracking
+
+Start real-time memory tracking.
+
+```python
+def start_tracking(self) -> None
+```
+
+#### stop_tracking
+
+Stop tracking and return results.
+
+```python
+def stop_tracking(self) -> TrackingResult
+```
+
+<ResponseField name="TrackingResult" type="object">
+  Object containing memory usage history, timestamps, events, and alerts
+</ResponseField>
+
+#### get_current_memory
+
+Get current memory usage without starting tracking.
+
+```python
+def get_current_memory(self) -> float
+```
+
+<ResponseField name="float" type="float">
+  Current memory usage in MB
+</ResponseField>
+
+#### set_alert_threshold
+
+Update the alert threshold during tracking.
+
+```python
+def set_alert_threshold(self, threshold_mb: float) -> None
+```
+
+<ParamField path="threshold_mb" type="float">
+  New threshold in MB
+</ParamField>
+
+#### add_alert_callback
+
+Add callback function for memory alerts.
+
+```python
+def add_alert_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None
+```
+
+<ParamField path="callback" type="Callable">
+  Function to call when alert is triggered. Receives alert dictionary with timestamp, memory_mb, and threshold_mb
+</ParamField>
+
+**Example:**
+
+```python
+def alert_handler(alert):
+    print(f"Alert: {alert['message']}")
+    print(f"Memory: {alert['memory_mb']:.2f} MB")
+
+tracker.add_alert_callback(alert_handler)
+```
+
+#### check_alerts
+
+Check if any alerts have been triggered recently.
+
+```python
+def check_alerts(self) -> bool
+```
+
+<ResponseField name="bool" type="bool">
+  True if alerts triggered in last 10 seconds
+</ResponseField>
+
+#### get_tracking_results
+
+Get current tracking results without stopping.
+
+```python
+def get_tracking_results(self) -> TrackingResult
+```
+
+## TrackingResult
+
+Results from real-time memory tracking.
+
+<ResponseField name="start_time" type="float">
+  Start timestamp
+</ResponseField>
+
+<ResponseField name="end_time" type="float">
+  End timestamp
+</ResponseField>
+
+<ResponseField name="memory_usage" type="List[float]">
+  List of memory samples in MB
+</ResponseField>
+
+<ResponseField name="timestamps" type="List[float]">
+  Corresponding timestamps for each sample
+</ResponseField>
+
+<ResponseField name="events" type="List[Dict]">
+  Telemetry events captured during tracking
+</ResponseField>
+
+<ResponseField name="alerts_triggered" type="List[Dict]">
+  List of triggered alerts
+</ResponseField>
+
+<ResponseField name="peak_memory" type="float">
+  Peak memory usage in MB
+</ResponseField>
+
+<ResponseField name="average_memory" type="float">
+  Average memory usage in MB
+</ResponseField>
+
+### Properties
+
+**duration**: Total tracking duration in seconds
+
+**memory_growth_rate**: Memory growth rate in MB/second
+
+## MemoryWatchdog
+
+Automatic memory management and cleanup for TensorFlow.
+
+### Constructor
+
+```python
+MemoryWatchdog(
+    max_memory_mb: float = 8000,
+    cleanup_threshold_mb: float = 6000,
+    check_interval: float = 5.0
+)
+```
+
+<ParamField path="max_memory_mb" type="float" default="8000">
+  Maximum memory before forced cleanup
+</ParamField>
+
+<ParamField path="cleanup_threshold_mb" type="float" default="6000">
+  Memory threshold to trigger cleanup
+</ParamField>
+
+<ParamField path="check_interval" type="float" default="5.0">
+  Time between memory checks in seconds
+</ParamField>
+
+### Methods
+
+#### start
+
+Start memory watchdog monitoring.
+
+```python
+def start(self) -> None
+```
+
+#### stop
+
+Stop memory watchdog.
+
+```python
+def stop(self) -> None
+```
+
+#### force_cleanup
+
+Force immediate memory cleanup.
+
+```python
+def force_cleanup(self) -> None
+```
+
+#### add_cleanup_callback
+
+Add custom cleanup callback function.
+
+```python
+def add_cleanup_callback(self, callback: Callable[[], None]) -> None
+```
+
+<ParamField path="callback" type="Callable">
+  Function to call during cleanup operations
+</ParamField>
+
+## Example
+
+```python
+from tfmemprof.tracker import MemoryTracker, MemoryWatchdog
+import tensorflow as tf
+
+# Basic tracking
+tracker = MemoryTracker(
+    sampling_interval=0.5,
+    alert_threshold_mb=4000
+)
+
+# Add alert callback
+def on_alert(alert):
+    print(f"Memory alert: {alert['message']}")
+    
+tracker.add_alert_callback(on_alert)
+
+# Start tracking
+tracker.start_tracking()
+
+# Run your code
+model = tf.keras.applications.ResNet50()
+model.fit(x_train, y_train, epochs=10)
+
+# Stop and get results
+results = tracker.stop_tracking()
+
+print(f"Peak memory: {results.peak_memory:.2f} MB")
+print(f"Average memory: {results.average_memory:.2f} MB")
+print(f"Alerts triggered: {len(results.alerts_triggered)}")
+
+# Memory watchdog for automatic cleanup
+watchdog = MemoryWatchdog(
+    max_memory_mb=8000,
+    cleanup_threshold_mb=6000
+)
+
+# Add custom cleanup
+def custom_cleanup():
+    print("Running custom cleanup")
+    # Clear caches, etc.
+    
+watchdog.add_cleanup_callback(custom_cleanup)
+watchdog.start()
+
+# Your training code
+# Watchdog automatically cleans up when thresholds exceeded
+
+watchdog.stop()
+```

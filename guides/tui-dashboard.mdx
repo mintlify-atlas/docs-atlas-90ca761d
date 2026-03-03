@@ -1,0 +1,566 @@
+---
+title: TUI dashboard guide
+description: Interactive terminal UI for real-time GPU memory monitoring and profiling
+---
+
+The GPU Memory Profiler includes a Textual-based terminal user interface (TUI) that provides interactive monitoring, profiling, and diagnostics without leaving your terminal.
+
+## Installation
+
+Install with TUI support:
+
+```bash
+pip install "gpu-memory-profiler[tui]"
+```
+
+For development, TUI dependencies are included in `requirements-dev.txt`.
+
+## Launch the TUI
+
+Start the interactive dashboard:
+
+```bash
+gpu-profiler
+```
+
+The TUI opens in your terminal with multiple tabs for different workflows.
+
+## Interface overview
+
+The TUI provides six main tabs:
+
+<Tabs>
+  <Tab title="Overview">
+    Live system summary showing:
+
+    - Platform information (OS, Python version)
+    - PyTorch/TensorFlow versions
+    - GPU availability and configuration
+    - Current memory snapshot
+    - Backend detection (CUDA, ROCm, MPS, CPU)
+
+    **Keyboard shortcut:** Press `r` to refresh
+
+    ```
+    ╭─────────────────── System Overview ───────────────────╮
+    │ Platform: Linux-5.15.0-x86_64                         │
+    │ Python: 3.10.12                                       │
+    │ PyTorch: 2.1.0+cu121                                  │
+    │ TensorFlow: 2.15.0                                    │
+    │                                                        │
+    │ GPU 0: NVIDIA A100-SXM4-40GB                          │
+    │   Total: 40.00 GB                                     │
+    │   Allocated: 2.45 GB (6.1%)                           │
+    │   Reserved: 3.12 GB (7.8%)                            │
+    │   Backend: cuda                                       │
+    ╰────────────────────────────────────────────────────────╯
+    ```
+  </Tab>
+
+  <Tab title="PyTorch">
+    PyTorch-specific monitoring:
+
+    - Copy-ready commands for curated demos
+    - Live GPU memory table
+    - Refreshable profile summary
+    - Recent decorator/context profiling results
+
+    Features:
+    - **Refresh Profiles** button: Load latest profiling data
+    - **Clear Profiles** button: Reset profiling history
+    - Auto-updating memory table
+
+    The profile summary shows:
+    - Function name
+    - Peak memory usage
+    - Memory delta per call
+    - Average execution duration
+
+    ```
+    ╭────────────── PyTorch Profiles ──────────────╮
+    │ Function            Peak      Delta    Time  │
+    │ train_step         2.45 GB   +128 MB  0.123s │
+    │ forward_pass       1.87 GB   +64 MB   0.089s │
+    │ backward_pass      2.12 GB   +96 MB   0.045s │
+    ╰──────────────────────────────────────────────╯
+    ```
+  </Tab>
+
+  <Tab title="TensorFlow">
+    TensorFlow-specific monitoring:
+
+    - Copy-ready TensorFlow commands
+    - Auto-updating GPU memory table
+    - Profile summary from `tfmemprof.context_profiler`
+    - Backend diagnostics
+
+    Shows Metal availability on Apple Silicon and provides installation hints when `tensorflow-metal` is missing.
+  </Tab>
+
+  <Tab title="Monitoring">
+    Real-time memory tracking dashboard:
+
+    **Controls:**
+    - Start/Stop Live Tracking
+    - Export CSV/JSON
+    - Auto Cleanup toggle (Memory Watchdog)
+    - Force/Aggressive Cleanup buttons
+    - Warning/Critical threshold sliders
+
+    **Displays:**
+    - Live allocation/alert event stream
+    - Rolling statistics table
+      - Current memory
+      - Peak memory
+      - Memory utilization %
+      - Alert count
+    - Real-time log of tracking events
+
+    ```
+    ╭───────── Monitoring Stats ─────────╮
+    │ Current:       2.45 GB             │
+    │ Peak:          3.21 GB             │
+    │ Utilization:   6.1%                │
+    │ Alerts:        3                   │
+    ╰────────────────────────────────────╯
+
+    ╭─────────── Event Log ──────────╮
+    │ [14:23:45] PEAK: 2.45 GB       │
+    │ [14:23:52] WARNING: 82.3%      │
+    │ [14:24:01] CRITICAL: 96.1%     │
+    │ [14:24:03] CLEANUP: Freed 1 GB │
+    ╰────────────────────────────────╯
+    ```
+
+    When you click **Start Live Tracking**, the TUI:
+    1. Spins up `gpumemprof.tracker.MemoryTracker`
+    2. Pipes events to the log in real-time
+    3. Updates stats table every second
+    4. Responds to threshold alerts
+  </Tab>
+
+  <Tab title="Visualizations">
+    Interactive visualization controls:
+
+    **Features:**
+    - **Refresh Timeline**: Generate ASCII timeline from tracking data
+    - **Generate PNG Plot**: Export Matplotlib visualization
+    - **Generate HTML Plot**: Export interactive Plotly dashboard
+    - Summary statistics display
+
+    Visualizations saved to `./visualizations/` directory.
+
+    Requires `[viz]` extras for Plotly export:
+    ```bash
+    pip install "gpu-memory-profiler[viz]"
+    ```
+
+    ASCII timeline example:
+    ```
+    Memory Usage Timeline (GB)
+    3.5 │                              ╭─╮
+    3.0 │                         ╭────╯ ╰─╮
+    2.5 │                    ╭────╯        ╰─╮
+    2.0 │              ╭────╯                ╰─╮
+    1.5 │         ╭────╯                       ╰──╮
+    1.0 │    ╭────╯                               ╰─
+    0.5 │╭───╯
+    0.0 ╰─────────────────────────────────────────────
+        0s    10s   20s   30s   40s   50s   60s
+    ```
+  </Tab>
+
+  <Tab title="CLI & Actions">
+    Command execution panel:
+
+    **Quick Actions:**
+    - **gpumemprof diagnose**: Generate diagnostic bundle
+    - **OOM Scenario**: Run simulated OOM workflow
+    - **Capability Matrix**: Launch smoke test suite
+
+    **Command Input:**
+    - Text input box for custom commands
+    - Run button to execute
+    - Cancel button to terminate running commands
+    - RichLog streams stdout/stderr live
+
+    Example:
+    ```bash
+    # Enter command
+    $ gpumemprof info --detailed
+
+    # Click Run - output streams to log
+    [14:25:01] GPU Memory Profiler - System Information
+    [14:25:01] Platform: Linux-5.15.0-x86_64
+    [14:25:01] CUDA Available: True
+    ```
+
+    Commands automatically adapt to your backend:
+    - CUDA/ROCm: Full GPU commands
+    - MPS: Single-device commands
+    - CPU: Fallback to CPU profiling
+  </Tab>
+</Tabs>
+
+## Keyboard shortcuts
+
+Global shortcuts available in all tabs:
+
+| Key | Action |
+|-----|--------|
+| `r` | Refresh overview tab |
+| `f` | Focus the log panel |
+| `g` | Log `gpumemprof info` output |
+| `t` | Log `tfmemprof info` output |
+| `q` | Quit the TUI |
+
+## Live tracking workflow
+
+<Steps>
+  <Step title="Navigate to Monitoring tab">
+    Switch to the Monitoring tab using mouse or keyboard navigation.
+  </Step>
+
+  <Step title="Configure thresholds">
+    Adjust warning and critical thresholds using the sliders:
+
+    - **Warning threshold**: Default 80%
+    - **Critical threshold**: Default 95%
+
+    These trigger alerts in the event log.
+  </Step>
+
+  <Step title="Enable auto cleanup (optional)">
+    Toggle **Auto Cleanup** to enable `MemoryWatchdog`:
+
+    - Monitors memory thresholds
+    - Triggers `torch.cuda.empty_cache()` on warnings
+    - Runs garbage collection on critical alerts
+
+    Manual cleanup buttons:
+    - **Force Cleanup**: Clear CUDA cache
+    - **Aggressive Cleanup**: Cache clear + GC
+  </Step>
+
+  <Step title="Start tracking">
+    Click **Start Live Tracking** button.
+
+    The TUI:
+    1. Creates `MemoryTracker` instance
+    2. Begins sampling at configured interval
+    3. Streams events to log panel
+    4. Updates statistics table
+
+    Events appear as:
+    ```
+    [14:23:45] allocation: Allocated 512 MB
+    [14:23:46] peak: New peak memory: 2.45 GB
+    [14:23:52] memory_warning_percent: 82.3%
+    ```
+  </Step>
+
+  <Step title="Monitor in real-time">
+    Watch the stats table update every second:
+
+    - Current memory allocation
+    - Peak memory reached
+    - Utilization percentage
+    - Total alert count
+
+    The event log scrolls automatically with new events.
+  </Step>
+
+  <Step title="Export data">
+    While tracking is active or after stopping:
+
+    - **Export CSV**: Save to `./exports/tracking_TIMESTAMP.csv`
+    - **Export JSON**: Save to `./exports/tracking_TIMESTAMP.json`
+
+    Files include all captured events with telemetry metadata.
+  </Step>
+
+  <Step title="Stop tracking">
+    Click **Stop Tracking** to end the session.
+
+    Final statistics remain visible for review.
+  </Step>
+</Steps>
+
+## Visualization workflow
+
+<Steps>
+  <Step title="Navigate to Visualizations tab">
+    Switch to the Visualizations tab.
+  </Step>
+
+  <Step title="Refresh timeline">
+    Click **Refresh Timeline** to generate ASCII visualization:
+
+    - Reads current tracking session data
+    - Renders memory timeline as text graph
+    - Shows summary statistics
+
+    Requires active or completed tracking session.
+  </Step>
+
+  <Step title="Generate static plot">
+    Click **Generate PNG Plot** to create Matplotlib visualization:
+
+    - Saves to `./visualizations/memory_timeline_TIMESTAMP.png`
+    - Includes allocated and reserved memory
+    - High-resolution (300 DPI)
+
+    Example plot:
+    - X-axis: Time (seconds)
+    - Y-axis: Memory (GB)
+    - Two subplots: Allocated vs Reserved
+  </Step>
+
+  <Step title="Generate interactive plot">
+    Click **Generate HTML Plot** for Plotly dashboard:
+
+    - Saves to `./visualizations/dashboard_TIMESTAMP.html`
+    - Interactive hover tooltips
+    - Zoom and pan controls
+    - Multiple subplots with linked axes
+
+    Requires `pip install "gpu-memory-profiler[viz]"`
+  </Step>
+</Steps>
+
+## CLI automation workflow
+
+<Steps>
+  <Step title="Navigate to CLI & Actions tab">
+    Switch to the CLI & Actions tab.
+  </Step>
+
+  <Step title="Use quick actions">
+    Click preset buttons:
+
+    **Diagnose:**
+    ```bash
+    gpumemprof diagnose --duration 0 --output ./diag_bundle
+    ```
+    Generates diagnostic bundle in seconds.
+
+    **OOM Scenario:**
+    ```bash
+    python -m examples.oom_scenario --mode simulated
+    ```
+    Runs safe OOM flight recorder test.
+
+    **Capability Matrix:**
+    ```bash
+    python -m examples.cli.capability_matrix --mode smoke --skip-tui
+    ```
+    Executes smoke test suite.
+  </Step>
+
+  <Step title="Run custom commands">
+    Enter command in text input:
+
+    ```bash
+    gpumemprof track --duration 10 --output /tmp/test.json
+    ```
+
+    Click **Run** to execute. Output streams to RichLog.
+  </Step>
+
+  <Step title="Cancel long-running commands">
+    Click **Cancel Command** to terminate:
+
+    - Sends SIGTERM to subprocess
+    - Displays cancellation in log
+    - Cleans up resources
+  </Step>
+</Steps>
+
+## Profile inspection workflow
+
+<Steps>
+  <Step title="Run profiled code">
+    In your terminal, execute code with profiling decorators:
+
+    ```python
+    from gpumemprof import profile_function
+
+    @profile_function
+    def train_step(model, data):
+        output = model(data)
+        loss = criterion(output)
+        loss.backward()
+        return loss
+
+    # Run training
+    for batch in dataloader:
+        train_step(model, batch)
+    ```
+  </Step>
+
+  <Step title="Refresh profiles in TUI">
+    Switch to PyTorch or TensorFlow tab and click **Refresh Profiles**.
+
+    The TUI queries global profiler instances used by decorators.
+  </Step>
+
+  <Step title="Review profiling results">
+    Profile table shows:
+
+    - Function name from decorator
+    - Peak memory during execution
+    - Memory delta (allocated - freed)
+    - Average execution duration
+
+    Sorted by peak memory descending.
+  </Step>
+
+  <Step title="Clear profiles">
+    Click **Clear Profiles** to reset profiling history.
+
+    Useful when starting new profiling sessions.
+  </Step>
+</Steps>
+
+## GPU-less environments
+
+The TUI gracefully handles systems without GPU:
+
+<AccordionGroup>
+  <Accordion title="CPU-only systems">
+    When no GPU is detected:
+
+    - Overview tab shows "GPU Available: No"
+    - Displays CPU count and memory instead
+    - Monitoring tab uses `CPUMemoryTracker`
+    - CLI commands automatically use CPU mode
+
+    Example:
+    ```
+    ╭─────────── System Overview ───────────╮
+    │ GPU Available: No                     │
+    │ CPU Count: 8 physical / 16 logical    │
+    │ Total Memory: 32.00 GB                │
+    │ Available: 24.56 GB                   │
+    │ Backend: cpu                          │
+    ╰───────────────────────────────────────╯
+    ```
+  </Accordion>
+
+  <Accordion title="Apple Silicon (MPS)">
+    On macOS with Apple Silicon:
+
+    - Detects MPS backend availability
+    - Shows Metal plugin installation status
+    - Provides installation hints if missing
+    - Uses single logical device
+
+    Example:
+    ```
+    ╭─────────── Backend Info ──────────╮
+    │ Apple Silicon: Yes                │
+    │ MPS Available: Yes                │
+    │ PyTorch MPS: Available            │
+    │ TensorFlow Metal: Not Installed   │
+    │                                   │
+    │ Install for TensorFlow GPU:       │
+    │ pip install tensorflow-metal      │
+    ╰───────────────────────────────────╯
+    ```
+  </Accordion>
+
+  <Accordion title="ROCm systems">
+    For AMD GPUs with ROCm:
+
+    - Detects ROCm backend
+    - Shows ROCm version
+    - Full profiling support
+    - Same interface as CUDA
+
+    The TUI automatically uses the correct backend.
+  </Accordion>
+</AccordionGroup>
+
+## Terminal requirements
+
+For optimal TUI experience:
+
+- **Minimum size**: 100x30 characters
+- **Color support**: 256 colors or true color
+- **Unicode support**: UTF-8 encoding
+- **Terminal**: Modern terminal emulators
+  - iTerm2 (macOS)
+  - Windows Terminal
+  - GNOME Terminal
+  - Alacritty
+  - Kitty
+
+Textual adapts to smaller windows but layout may be compressed.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Missing dependency error">
+    ```
+    ModuleNotFoundError: No module named 'textual'
+    ```
+
+    **Solution:**
+    ```bash
+    pip install "gpu-memory-profiler[tui]"
+    ```
+  </Accordion>
+
+  <Accordion title="GPU metrics unavailable">
+    Overview shows "GPU Available: No" incorrectly.
+
+    **Check:**
+    1. CUDA/ROCm drivers installed
+    2. PyTorch compiled with CUDA support:
+       ```python
+       import torch
+       print(torch.cuda.is_available())
+       ```
+    3. Visible devices:
+       ```bash
+       nvidia-smi  # or rocm-smi
+       ```
+  </Accordion>
+
+  <Accordion title="Terminal too small warning">
+    TUI layout appears compressed.
+
+    **Solution:**
+    - Maximize terminal window
+    - Zoom out (Cmd/Ctrl + -)
+    - Use fullscreen mode
+    - Minimum recommended: 100x30
+  </Accordion>
+
+  <Accordion title="Tracking not starting">
+    "Start Live Tracking" button doesn't respond.
+
+    **Check:**
+    1. PyTorch installed correctly
+    2. No other profilers running
+    3. Check error in log panel
+    4. Restart TUI
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="CLI usage" icon="terminal" href="/guides/cli-usage">
+    Learn command-line profiling tools
+  </Card>
+  <Card title="Visualization" icon="chart-line" href="/guides/visualization">
+    Generate plots outside the TUI
+  </Card>
+  <Card title="PyTorch guide" icon="fire" href="/guides/pytorch">
+    PyTorch profiling APIs
+  </Card>
+  <Card title="TensorFlow guide" icon="brain" href="/guides/tensorflow">
+    TensorFlow profiling APIs
+  </Card>
+</CardGroup>

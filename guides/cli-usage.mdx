@@ -1,0 +1,566 @@
+---
+title: CLI usage guide
+description: Command-line interface for GPU memory profiling in PyTorch and TensorFlow
+---
+
+The GPU Memory Profiler provides command-line tools for profiling, monitoring, and diagnosing memory issues without writing code.
+
+## Installation
+
+After installing the package, two CLI tools are available:
+
+```bash
+pip install gpu-memory-profiler
+
+# Verify installation
+gpumemprof --help
+tfmemprof --help
+```
+
+## Canonical workflow
+
+Use this sequence for reproducible diagnostics:
+
+<Steps>
+  <Step title="Inspect environment">
+    Check your system configuration and GPU availability:
+
+    ```bash
+    gpumemprof info
+    tfmemprof info
+    ```
+
+    For detailed GPU information:
+
+    ```bash
+    gpumemprof info --device 0 --detailed
+    ```
+  </Step>
+
+  <Step title="Capture telemetry">
+    Run a short tracking session to collect baseline data:
+
+    ```bash
+    gpumemprof track --duration 2 --interval 0.5 \
+      --output /tmp/gpumemprof_track.json \
+      --format json --watchdog
+    ```
+
+    Analyze the captured data:
+
+    ```bash
+    gpumemprof analyze /tmp/gpumemprof_track.json \
+      --format txt --output /tmp/gpumemprof_analysis.txt
+    ```
+  </Step>
+
+  <Step title="Produce diagnostic bundle">
+    Create a comprehensive diagnostic artifact:
+
+    ```bash
+    gpumemprof diagnose --duration 0 --output /tmp/gpumemprof_diag
+    tfmemprof diagnose --duration 0 --output /tmp/tf_diag
+    ```
+
+    Exit codes:
+    - `0`: Success, no memory risk detected
+    - `1`: Runtime or argument failure
+    - `2`: Success with memory risk detected
+  </Step>
+</Steps>
+
+## PyTorch CLI (gpumemprof)
+
+The `gpumemprof` command provides PyTorch-specific memory profiling.
+
+### Info command
+
+Display system and GPU information:
+
+```bash
+# Basic info
+gpumemprof info
+
+# Detailed info for specific GPU
+gpumemprof info --device 0 --detailed
+```
+
+<CodeGroup>
+```bash Output
+GPU Memory Profiler - System Information
+==================================================
+Platform: Linux-5.15.0-x86_64
+Python Version: 3.10.12
+CUDA Available: True
+Detected Backend: cuda
+CUDA Version: 12.1
+GPU Device Count: 1
+Current Device: 0
+
+GPU 0 Information:
+  Name: NVIDIA A100-SXM4-40GB
+  Total Memory: 40.00 GB
+  Allocated: 0.00 GB
+  Reserved: 0.00 GB
+  Multiprocessors: 108
+```
+
+```bash Detailed output
+Detailed Information:
+------------------------------
+|===========================================================================|
+|                  PyTorch CUDA memory summary, device ID 0                 |
+|---------------------------------------------------------------------------|
+|            CUDA OOMs: 0            |        cudaMalloc retries: 0         |
+|===========================================================================|
+|        Metric         | Cur Usage  | Peak Usage | Tot Alloc  | Tot Freed  |
+|---------------------------------------------------------------------------|
+| Allocated memory      |      0 B   |      0 B   |      0 B   |      0 B   |
+| Active memory         |      0 B   |      0 B   |      0 B   |      0 B   |
+```
+</CodeGroup>
+
+### Monitor command
+
+Monitor memory usage for a specified duration:
+
+<Tabs>
+  <Tab title="CSV output">
+    ```bash
+    gpumemprof monitor --duration 30 --interval 0.5 \
+      --output monitor.csv --format csv
+    ```
+
+    Output file contains:
+    - Timestamp
+    - Allocated memory
+    - Reserved memory
+    - Device ID
+  </Tab>
+
+  <Tab title="JSON output">
+    ```bash
+    gpumemprof monitor --duration 30 --interval 0.5 \
+      --output monitor.json --format json
+    ```
+
+    JSON structure:
+    ```json
+    {
+      "snapshots": [
+        {
+          "timestamp": 1234567890.123,
+          "allocated_memory": 1073741824,
+          "reserved_memory": 2147483648,
+          "device_id": 0
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Monitoring output:
+
+```bash
+Starting memory monitoring for 30 seconds...
+Mode: GPU (cuda)
+Sampling interval: 0.5s
+Press Ctrl+C to stop early
+
+Elapsed: 5.0s, Current Memory: 1.24 GB
+Elapsed: 10.0s, Current Memory: 2.48 GB
+Elapsed: 15.0s, Current Memory: 3.12 GB
+
+Monitoring Summary:
+------------------------------
+Snapshots collected: 60
+Peak memory usage: 3.45 GB
+Memory change from baseline: 3.45 GB
+```
+
+### Track command
+
+Real-time memory tracking with alerts and thresholds:
+
+```bash
+gpumemprof track --duration 30 --interval 0.5 \
+  --output track.json --format json \
+  --watchdog \
+  --warning-threshold 75 \
+  --critical-threshold 90
+```
+
+<AccordionGroup>
+  <Accordion title="Basic tracking">
+    Track memory without time limit:
+
+    ```bash
+    gpumemprof track --output tracking.csv
+    ```
+
+    Press Ctrl+C to stop and save results.
+  </Accordion>
+
+  <Accordion title="With memory watchdog">
+    Enable automatic cleanup on high memory:
+
+    ```bash
+    gpumemprof track --duration 60 --watchdog \
+      --warning-threshold 80 --critical-threshold 95
+    ```
+
+    The watchdog triggers cleanup when thresholds are exceeded.
+  </Accordion>
+
+  <Accordion title="OOM flight recorder">
+    Capture detailed state on out-of-memory:
+
+    ```bash
+    gpumemprof track \
+      --oom-flight-recorder \
+      --oom-dump-dir ./oom_dumps \
+      --oom-max-dumps 10 \
+      --oom-max-total-mb 1024 \
+      --output track.json --format json
+    ```
+
+    Configuration:
+    - `--oom-dump-dir`: Directory for OOM dump bundles
+    - `--oom-buffer-size`: Ring buffer size (default: max events)
+    - `--oom-max-dumps`: Maximum dumps to retain (default: 5)
+    - `--oom-max-total-mb`: Max storage in MB (default: 256)
+  </Accordion>
+</AccordionGroup>
+
+Tracking output:
+
+```bash
+Starting real-time memory tracking...
+Device: current
+Sampling interval: 0.5s
+Duration: 30s
+Press Ctrl+C to stop
+
+[14:23:45] PEAK: New peak memory: 2.45 GB
+[14:23:52] WARNING: Memory usage at 82.3%
+Elapsed: 10.0s, Memory: 2.89 GB (84.5%), Peak: 2.89 GB
+[14:24:01] CRITICAL: Memory usage at 96.1%
+Elapsed: 20.0s, Memory: 3.21 GB (96.1%), Peak: 3.21 GB
+
+Tracking Summary:
+------------------------------
+Total events: 245
+Peak memory: 3.21 GB
+Automatic cleanups: 2
+Events saved to: track.json
+```
+
+### Analyze command
+
+Analyze profiling results with optional visualization:
+
+```bash
+# Text analysis
+gpumemprof analyze track.json --format txt --output analysis.txt
+
+# With visualization
+gpumemprof analyze track.json --visualization --plot-dir plots
+```
+
+Analysis output:
+
+```
+Analyzing profiling results from: track.json
+
+Basic Analysis:
+Input file: track.json
+File size: 524288 bytes
+Number of results: 1
+Number of snapshots: 245
+
+Analysis functionality is available through the Python API.
+Please use the Python library for detailed analysis:
+
+Example:
+from gpumemprof import MemoryAnalyzer
+analyzer = MemoryAnalyzer()
+patterns = analyzer.analyze_memory_patterns(results)
+insights = analyzer.generate_performance_insights(results)
+report = analyzer.generate_optimization_report(results)
+```
+
+### Diagnose command
+
+Produce a portable diagnostic bundle for debugging:
+
+```bash
+# Quick diagnostic (no tracking)
+gpumemprof diagnose --duration 0 --output ./diag_bundle_quick
+
+# Full diagnostic with 5-second telemetry
+gpumemprof diagnose --duration 5 --interval 0.5 --output ./diag_bundle
+```
+
+Diagnostic output:
+
+```bash
+Artifact: /tmp/diag_bundle_20260303_142315
+Status: OK (exit_code=0)
+Findings: no memory risk detected
+```
+
+Generated files:
+- `manifest.json` - Metadata about the diagnostic run
+- `system_info.json` - Complete system configuration
+- `diagnostic_summary.json` - Analysis summary
+- `telemetry_timeline.json` - Memory timeline (if duration > 0)
+- `requirements.txt` - Python package versions
+
+## TensorFlow CLI (tfmemprof)
+
+The `tfmemprof` command provides TensorFlow-specific memory profiling.
+
+### Info command
+
+Display TensorFlow configuration:
+
+```bash
+tfmemprof info
+```
+
+<CodeGroup>
+```bash Output
+TensorFlow Memory Profiler - System Information
+==================================================
+Platform: Linux-5.15.0-x86_64
+Python Version: 3.10.12
+TensorFlow Version: 2.15.0
+CPU Count: 16
+Total System Memory: 64.00 GB
+Available Memory: 48.32 GB
+
+GPU Information:
+--------------------
+GPU Available: Yes
+GPU Count: 1
+Total GPU Memory: 40960 MB
+
+GPU 0:
+  Name: NVIDIA A100-SXM4-40GB
+  Current Memory: 0.0 MB
+  Peak Memory: 0.0 MB
+```
+
+```bash Backend diagnostics
+TensorFlow Backend Diagnostics:
+------------------------------
+Hardware GPU Detected: True
+Runtime Backend: cuda
+Runtime GPU Count: 1
+Apple Silicon: False
+tensorflow-metal Installed: False
+CUDA Build: True
+ROCm Build: False
+TensorRT Build: False
+```
+</CodeGroup>
+
+### Monitor command
+
+Monitor TensorFlow GPU memory:
+
+```bash
+tfmemprof monitor --interval 0.5 --duration 30 --output tf_monitor.json
+```
+
+With alert threshold:
+
+```bash
+tfmemprof monitor --interval 1.0 --duration 60 \
+  --threshold 4096 --output tf_monitor.json
+```
+
+### Track command
+
+Background memory tracking:
+
+```bash
+tfmemprof track --interval 0.5 --threshold 4096 --output tf_track.json
+```
+
+Press Ctrl+C to stop and save results.
+
+### Analyze command
+
+Analyze TensorFlow profiling results:
+
+<Tabs>
+  <Tab title="Basic analysis">
+    ```bash
+    tfmemprof analyze --input tf_monitor.json
+    ```
+
+    Output:
+    ```
+    Analyzing results from tf_monitor.json...
+
+    Basic Analysis:
+    ---------------
+    Peak Memory: 3.45 GB
+    Average Memory: 2.12 GB
+    Duration: 30.00 seconds
+    Memory Allocations: 156
+    Memory Deallocations: 142
+    ```
+  </Tab>
+
+  <Tab title="Leak detection">
+    ```bash
+    tfmemprof analyze --input tf_track.json --detect-leaks
+    ```
+
+    Output:
+    ```
+    Memory Leak Analysis:
+    ----------------------
+    ⚠️  Potential memory leaks detected:
+      - steady_growth: Memory growing steadily (Severity: medium)
+      - insufficient_cleanup: Deallocations < 90% of allocations (Severity: high)
+    ```
+  </Tab>
+
+  <Tab title="Optimization">
+    ```bash
+    tfmemprof analyze --input tf_track.json --optimize
+    ```
+
+    Output:
+    ```
+    Optimization Analysis:
+    ----------------------
+    Overall Score: 6.5/10
+
+    Category Scores:
+      memory_efficiency: 7.2/10
+      memory_stability: 5.8/10
+      peak_usage: 6.5/10
+
+    Top Recommendations:
+      1. Consider reducing batch size to lower peak memory
+      2. Implement gradient accumulation for large batches
+      3. Enable mixed precision training
+    ```
+  </Tab>
+
+  <Tab title="Full report">
+    ```bash
+    tfmemprof analyze --input tf_track.json \
+      --detect-leaks --optimize --visualize \
+      --report tf_report.txt
+    ```
+
+    Generates:
+    - Leak analysis
+    - Optimization scores
+    - `memory_timeline.png`
+    - `tf_report.txt`
+  </Tab>
+</Tabs>
+
+### Diagnose command
+
+Produce TensorFlow diagnostic bundle:
+
+```bash
+# Quick diagnostic
+tfmemprof diagnose --duration 0 --output ./tf_diag_quick
+
+# Full diagnostic
+tfmemprof diagnose --duration 5 --interval 0.5 --output ./tf_diag
+```
+
+## Common workflows
+
+<AccordionGroup>
+  <Accordion title="Debug OOM errors">
+    Diagnose out-of-memory failures:
+
+    ```bash
+    # Enable OOM flight recorder
+    gpumemprof track --oom-flight-recorder \
+      --oom-dump-dir ./oom_logs \
+      --output tracking.json
+
+    # Run your failing script
+    python train.py
+
+    # Check OOM dumps
+    ls -lh ./oom_logs/
+    ```
+  </Accordion>
+
+  <Accordion title="Compare PyTorch vs TensorFlow">
+    Profile both frameworks:
+
+    ```bash
+    # PyTorch baseline
+    gpumemprof track --duration 30 --output pytorch_baseline.json
+    python train_pytorch.py
+
+    # TensorFlow baseline
+    tfmemprof track --duration 30 --output tf_baseline.json
+    python train_tensorflow.py
+
+    # Compare results
+    gpumemprof analyze pytorch_baseline.json --format txt
+    tfmemprof analyze --input tf_baseline.json
+    ```
+  </Accordion>
+
+  <Accordion title="Continuous monitoring">
+    Set up automated profiling:
+
+    ```bash
+    #!/bin/bash
+    # monitor.sh
+
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    OUTPUT_DIR="./monitoring/$TIMESTAMP"
+    mkdir -p $OUTPUT_DIR
+
+    # Start tracking in background
+    gpumemprof track --output $OUTPUT_DIR/track.json &
+    PROFILER_PID=$!
+
+    # Run training
+    python train.py
+
+    # Stop tracking
+    kill $PROFILER_PID
+
+    # Generate report
+    gpumemprof analyze $OUTPUT_DIR/track.json \
+      --visualization --plot-dir $OUTPUT_DIR
+
+    echo "Monitoring data saved to: $OUTPUT_DIR"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="PyTorch guide" icon="fire" href="/guides/pytorch">
+    Learn PyTorch-specific profiling APIs
+  </Card>
+  <Card title="TensorFlow guide" icon="brain" href="/guides/tensorflow">
+    Learn TensorFlow-specific profiling APIs
+  </Card>
+  <Card title="TUI dashboard" icon="window" href="/guides/tui-dashboard">
+    Use the interactive terminal interface
+  </Card>
+  <Card title="Visualization" icon="chart-line" href="/guides/visualization">
+    Generate plots and dashboards
+  </Card>
+</CardGroup>

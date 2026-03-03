@@ -1,0 +1,381 @@
+---
+title: gpu-profiler
+description: CLI reference for the gpu-profiler interactive TUI application
+---
+
+The `gpu-profiler` command launches an interactive Terminal User Interface (TUI) for GPU memory profiling and monitoring.
+
+## Installation
+
+Install with TUI support:
+
+```bash
+pip install 'gpu-memory-profiler[tui]'
+```
+
+Required dependencies:
+- `torch` - PyTorch for GPU profiling
+- `textual` - Terminal UI framework
+- `pyfiglet` - ASCII art generation (optional)
+
+Optional dependencies:
+- `tensorflow` - TensorFlow profiling support
+- `matplotlib` - PNG plot generation
+- `plotly` - HTML interactive plot generation
+
+## Usage
+
+Launch the interactive TUI:
+
+```bash
+gpu-profiler
+```
+
+No additional command-line arguments are supported. All configuration is done through the interactive interface.
+
+## Interface overview
+
+The TUI provides a tabbed interface with the following sections:
+
+### Overview tab
+
+Displays:
+- Welcome banner with ASCII art
+- System information
+- GPU information for PyTorch and TensorFlow
+- Backend diagnostics (CUDA, ROCm, MPS, Metal)
+- Memory statistics
+
+### PyTorch tab
+
+Features:
+- Real-time GPU statistics table
+- Profile management (refresh, clear)
+- Historical profiling results
+- Memory metrics per profiling session
+
+### TensorFlow tab
+
+Features:
+- TensorFlow GPU statistics
+- Profile management (refresh, clear)
+- TensorFlow-specific memory tracking
+- Device information
+
+### Monitoring tab
+
+Live memory tracking interface with:
+
+**Controls:**
+- Start Live Tracking - Begin memory monitoring
+- Stop Tracking - End monitoring session
+- Auto Cleanup toggle - Enable/disable automatic memory cleanup
+- Apply Thresholds - Update warning/critical thresholds
+- Force Cleanup - Manually trigger memory cleanup (standard)
+- Aggressive Cleanup - Manually trigger aggressive memory cleanup
+- Export CSV - Save tracking events to CSV
+- Export JSON - Save tracking events to JSON
+- Clear Monitor Log - Clear the event log
+
+**Threshold inputs:**
+- Warning % - Memory usage warning threshold (default: 80)
+- Critical % - Memory usage critical threshold (default: 95)
+
+**Statistics display:**
+- Status (Active/Idle)
+- Device label
+- Current Allocated memory
+- Current Reserved memory
+- Peak Memory
+- Utilization percentage
+- Allocations per second
+- Alert Count
+- Total Events
+- Tracking Duration
+- Cleanup count
+
+**Alert history table:**
+- Timestamp of each alert
+- Alert type (warning, critical, error)
+- Alert message
+
+**Event log:**
+Real-time stream of memory events with:
+- Timestamp
+- Event type (color-coded)
+- Memory allocated/reserved/delta
+- Context messages
+
+### Visualizations tab
+
+Memory timeline visualization with:
+
+**Controls:**
+- Refresh Timeline - Update timeline from current tracking session
+- Generate PNG Plot - Export timeline as PNG image
+- Generate HTML Plot - Export interactive HTML plot
+
+**Timeline statistics:**
+- Sample count
+- Duration
+- Allocated Max
+- Reserved Max
+- Allocated Latest
+- Reserved Latest
+
+**ASCII timeline canvas:**
+Text-based visualization of memory usage over time showing:
+- Allocated memory line
+- Reserved memory line
+- Time axis
+- Memory axis
+
+**Export locations:**
+- PNG plots: `./visualizations/timeline_YYYYMMDD_HHMMSS.png`
+- HTML plots: `./visualizations/timeline_YYYYMMDD_HHMMSS.html`
+
+### CLI & Actions tab
+
+Command execution interface with:
+
+**Quick action buttons:**
+- gpumemprof info - Display system information
+- gpumemprof monitor - Run 30-second monitoring session
+- tfmemprof monitor - Run TensorFlow monitoring
+- gpumemprof diagnose - Generate diagnostic bundle
+- PyTorch Sample - Run PyTorch sample workload
+- TensorFlow Sample - Run TensorFlow sample workload
+- OOM Scenario - Test OOM flight recorder
+- Capability Matrix - Run comprehensive test suite
+
+**Custom command runner:**
+- Text input for custom commands
+- Run Command - Execute the entered command
+- Cancel Command - Cancel running command
+- Loading indicator during execution
+- Real-time stdout/stderr output in command log
+
+## Keyboard shortcuts
+
+- `q` - Quit application
+- `r` - Refresh overview tab
+- `f` - Focus command log
+- `g` - Show gpumemprof info help
+- `t` - Show tfmemprof info help
+- `Tab` - Navigate between tabs
+- `Ctrl+C` - Cancel operation
+
+## Live tracking features
+
+### Memory watchdog
+
+Automatic memory management system:
+
+**Standard cleanup:**
+- Clears PyTorch cache
+- Runs garbage collection
+- Minimal performance impact
+
+**Aggressive cleanup:**
+- Clears PyTorch cache
+- Clears CUDA IPC memory
+- Multiple garbage collection passes
+- Higher performance impact
+
+### Alert thresholds
+
+Configurable memory usage alerts:
+
+**Warning threshold (default 80%):**
+- Yellow warning event logged
+- Notification in event stream
+- Watchdog may trigger cleanup
+
+**Critical threshold (default 95%):**
+- Red critical event logged
+- Urgent notification
+- Automatic cleanup if watchdog enabled
+
+### Event export formats
+
+**CSV format:**
+```csv
+timestamp,event_type,memory_allocated,memory_reserved,context
+1709481234.567,allocation,1024000000,2048000000,"Tensor allocation"
+1709481235.123,warning,2048000000,4096000000,"Memory usage at 82%"
+```
+
+**JSON format:**
+```json
+{
+  "peak_memory": 4096000000,
+  "average_memory": 2048000000,
+  "duration": 120.5,
+  "events": [
+    {
+      "timestamp": 1709481234.567,
+      "event_type": "allocation",
+      "memory_allocated": 1024000000,
+      "memory_reserved": 2048000000,
+      "context": "Tensor allocation"
+    }
+  ]
+}
+```
+
+Exported files are saved to: `./exports/tracker_events_YYYYMMDD_HHMMSS.{csv,json}`
+
+## Sample workload outputs
+
+### PyTorch sample
+
+Runs a small neural network training loop and reports:
+- Peak memory allocated
+- Peak memory reserved
+- Total snapshots collected
+- Profiling duration
+
+### TensorFlow sample
+
+Executes TensorFlow operations and displays:
+- Peak GPU memory usage
+- Average memory usage
+- Total allocations
+- Profiling duration
+
+### CPU sample (fallback)
+
+When GPU is unavailable, runs CPU profiling:
+- Peak RSS (Resident Set Size)
+- Memory change
+- Snapshots collected
+- Profiling duration
+
+## Profile management
+
+### PyTorch profiles
+
+Stored in: `~/.gpumemprof/profiles/`
+
+Profile data includes:
+- Timestamp
+- Peak memory
+- Reserved memory
+- Number of snapshots
+- Device information
+
+### TensorFlow profiles
+
+Stored in: `~/.tfmemprof/profiles/`
+
+Profile data includes:
+- Timestamp
+- Peak memory
+- Average memory
+- Sample count
+- Device information
+
+## Backend detection
+
+The TUI automatically detects and adapts to:
+
+**PyTorch backends:**
+- CUDA (NVIDIA GPUs)
+- ROCm (AMD GPUs)
+- MPS (Apple Silicon)
+- CPU (fallback)
+
+**TensorFlow backends:**
+- CUDA (NVIDIA GPUs)
+- ROCm (AMD GPUs)
+- Metal (Apple Silicon with tensorflow-metal)
+- CPU (fallback)
+
+## Diagnostic bundle generation
+
+When running `gpumemprof diagnose` or `tfmemprof diagnose` from the CLI tab, diagnostic bundles are saved to:
+
+```
+artifacts/tui_diagnose/gpumemprof_diag_YYYYMMDD_HHMMSS/
+artifacts/tui_diagnose/tfmemprof_diag_YYYYMMDD_HHMMSS/
+```
+
+Bundle contents:
+- `manifest.json` - Metadata and risk flags
+- `diagnostic_summary.json` - Analysis summary
+- `system_info.json` - System and GPU information
+- `memory_timeline.json` - Memory usage over time
+- `stack_traces.txt` - Memory allocation stack traces
+
+## Common workflows
+
+### Monitor training session
+
+1. Switch to Monitoring tab
+2. Set Warning % to 80 and Critical % to 95
+3. Click "Apply Thresholds"
+4. Enable "Auto Cleanup" if desired
+5. Click "Start Live Tracking"
+6. Run your training script
+7. Monitor alerts and statistics in real-time
+8. Click "Stop Tracking" when complete
+9. Click "Export JSON" to save results
+
+### Profile and visualize
+
+1. Start live tracking in Monitoring tab
+2. Run your workload
+3. Switch to Visualizations tab
+4. Click "Refresh Timeline"
+5. Review ASCII timeline
+6. Click "Generate PNG Plot" or "Generate HTML Plot"
+7. Find plots in `./visualizations/` directory
+
+### Debug memory issues
+
+1. Switch to CLI & Actions tab
+2. Click "gpumemprof diagnose"
+3. Review diagnostic output in command log
+4. Check artifacts directory for detailed bundle
+5. Review `diagnostic_summary.json` for risk flags
+
+### Run sample workloads
+
+1. Switch to CLI & Actions tab
+2. Click "PyTorch Sample" or "TensorFlow Sample"
+3. Wait for workload completion
+4. Review results in command log
+5. Switch to PyTorch/TensorFlow tab
+6. Click "Refresh Profiles" to see new profile entry
+
+## Troubleshooting
+
+### TUI fails to launch
+
+Ensure torch is installed:
+```bash
+pip install torch
+```
+
+### No GPU detected
+
+Check system information in Overview tab. The TUI will fall back to CPU profiling if no GPU is available.
+
+### Visualizations not generating
+
+Install visualization dependencies:
+```bash
+pip install 'gpu-memory-profiler[viz]'
+```
+
+### TensorFlow tab shows errors
+
+Install TensorFlow:
+```bash
+pip install tensorflow
+```
+
+For Apple Silicon:
+```bash
+pip install tensorflow-metal
+```

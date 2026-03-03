@@ -1,0 +1,472 @@
+---
+title: Context profiler
+description: Easy-to-use decorators and context managers for profiling
+---
+
+The `context_profiler` module provides convenient decorators and context managers for profiling PyTorch code.
+
+## Functions
+
+### get_global_profiler()
+
+Get or create the global profiler instance.
+
+```python
+from gpumemprof import get_global_profiler
+
+profiler = get_global_profiler(device="cuda:0")
+```
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to use. If None, uses current device
+</ParamField>
+
+<ResponseField name="return" type="GPUMemoryProfiler">
+  Global profiler instance
+</ResponseField>
+
+---
+
+### set_global_profiler()
+
+Set the global profiler instance.
+
+```python
+from gpumemprof import set_global_profiler, GPUMemoryProfiler
+
+custom_profiler = GPUMemoryProfiler(device="cuda:1", track_tensors=True)
+set_global_profiler(custom_profiler)
+```
+
+<ParamField path="profiler" type="GPUMemoryProfiler">
+  Profiler instance to set as global
+</ParamField>
+
+---
+
+### profile_function()
+
+Decorator to profile a function's GPU memory usage.
+
+```python
+from gpumemprof import profile_function
+
+@profile_function
+def train_step(model, batch):
+    output = model(batch)
+    return output
+
+# With custom name
+@profile_function(name="forward_pass")
+def forward(x):
+    return model(x)
+
+# With custom profiler
+@profile_function(profiler=my_profiler, device="cuda:1")
+def compute(data):
+    return process(data)
+```
+
+<ParamField path="func" type="Optional[Callable]" default="None">
+  Function to profile (when used as @profile_function)
+</ParamField>
+
+<ParamField path="name" type="Optional[str]" default="None">
+  Custom name for the profiled function
+</ParamField>
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to use for profiling
+</ParamField>
+
+<ParamField path="profiler" type="Optional[GPUMemoryProfiler]" default="None">
+  Custom profiler instance to use
+</ParamField>
+
+---
+
+### profile_context()
+
+Context manager for profiling a block of code.
+
+```python
+from gpumemprof import profile_context
+
+with profile_context("data_loading") as prof:
+    data = load_data()
+    data = preprocess(data)
+
+# With custom profiler
+with profile_context("training", profiler=my_profiler) as prof:
+    model.train()
+```
+
+<ParamField path="name" type="str" default="'context'">
+  Name for the profiled context
+</ParamField>
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to use
+</ParamField>
+
+<ParamField path="profiler" type="Optional[GPUMemoryProfiler]" default="None">
+  Custom profiler instance
+</ParamField>
+
+---
+
+### start_monitoring()
+
+Start global memory monitoring.
+
+```python
+from gpumemprof import start_monitoring, stop_monitoring
+
+start_monitoring(interval=0.1)
+# ... run your code ...
+stop_monitoring()
+```
+
+<ParamField path="interval" type="float" default="0.1">
+  Monitoring interval in seconds
+</ParamField>
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to monitor
+</ParamField>
+
+---
+
+### stop_monitoring()
+
+Stop global memory monitoring.
+
+```python
+from gpumemprof import stop_monitoring
+
+stop_monitoring()
+```
+
+---
+
+### get_summary()
+
+Get global profiler summary.
+
+```python
+from gpumemprof import get_summary
+
+summary = get_summary()
+print(summary)
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Summary of profiling results
+</ResponseField>
+
+---
+
+### clear_results()
+
+Clear global profiler results.
+
+```python
+from gpumemprof import clear_results
+
+clear_results()
+```
+
+---
+
+### get_profile_results()
+
+Get recent profile results from global profiler.
+
+```python
+from gpumemprof import get_profile_results
+
+# Get all results
+results = get_profile_results()
+
+# Get last 10 results
+recent = get_profile_results(limit=10)
+```
+
+<ParamField path="limit" type="Optional[int]" default="None">
+  Maximum number of recent results to return
+</ParamField>
+
+<ResponseField name="return" type="List[ProfileResult]">
+  List of profiling results
+</ResponseField>
+
+---
+
+### profile_model_training()
+
+Profile an entire training loop.
+
+```python
+from gpumemprof import profile_model_training
+
+results = profile_model_training(
+    model=my_model,
+    train_loader=dataloader,
+    epochs=1,
+    device="cuda:0"
+)
+
+print(f"Batches profiled: {len(results['batch_results'])}")
+print(f"Total memory allocated: {results['overall_summary']['total_memory_allocated']}")
+```
+
+<ParamField path="model" type="torch.nn.Module">
+  PyTorch model to profile
+</ParamField>
+
+<ParamField path="train_loader" type="Any">
+  DataLoader for training data
+</ParamField>
+
+<ParamField path="epochs" type="int" default="1">
+  Number of epochs to profile
+</ParamField>
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to use
+</ParamField>
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Dictionary with batch results, epoch summaries, and overall summary
+</ResponseField>
+
+## Classes
+
+### ProfiledModule
+
+Wrapper for PyTorch modules that automatically profiles forward passes.
+
+```python
+from gpumemprof import ProfiledModule
+
+# Wrap a module
+model = MyModel()
+profiled_model = ProfiledModule(model, name="my_model")
+
+# Use normally - forward passes are profiled automatically
+output = profiled_model(input_data)
+```
+
+#### Constructor
+
+<ParamField path="module" type="torch.nn.Module">
+  PyTorch module to wrap
+</ParamField>
+
+<ParamField path="name" type="Optional[str]" default="None">
+  Name for profiling (defaults to class name)
+</ParamField>
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to use
+</ParamField>
+
+<ParamField path="profiler" type="Optional[GPUMemoryProfiler]" default="None">
+  Custom profiler instance
+</ParamField>
+
+#### Methods
+
+##### forward()
+
+Forward pass with automatic profiling.
+
+```python
+output = profiled_model(input_data)
+```
+
+---
+
+### MemoryProfiler
+
+High-level memory profiler with convenient methods.
+
+```python
+from gpumemprof import MemoryProfiler
+
+profiler = MemoryProfiler(device="cuda:0")
+```
+
+#### Constructor
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to profile
+</ParamField>
+
+#### Methods
+
+##### start_monitoring()
+
+Start continuous memory monitoring.
+
+```python
+profiler.start_monitoring(interval=0.5)
+```
+
+<ParamField path="interval" type="float" default="0.1">
+  Monitoring interval in seconds
+</ParamField>
+
+##### stop_monitoring()
+
+Stop continuous memory monitoring.
+
+```python
+profiler.stop_monitoring()
+```
+
+##### profile()
+
+Profile a function call.
+
+```python
+result = profiler.profile(my_function, arg1, arg2, kwarg=value)
+```
+
+<ParamField path="func" type="Callable">
+  Function to profile
+</ParamField>
+
+<ParamField path="*args" type="Any">
+  Function arguments
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Function keyword arguments
+</ParamField>
+
+<ResponseField name="return" type="ProfileResult">
+  Profiling result
+</ResponseField>
+
+##### context()
+
+Context manager for profiling code blocks.
+
+```python
+with profiler.context("preprocessing"):
+    data = preprocess(raw_data)
+```
+
+<ParamField path="name" type="str" default="'context'">
+  Name for the context
+</ParamField>
+
+##### wrap_module()
+
+Wrap a PyTorch module for automatic profiling.
+
+```python
+profiled_model = profiler.wrap_module(model, name="resnet50")
+```
+
+<ParamField path="module" type="torch.nn.Module">
+  Module to wrap
+</ParamField>
+
+<ParamField path="name" type="Optional[str]" default="None">
+  Name for profiling
+</ParamField>
+
+<ResponseField name="return" type="ProfiledModule">
+  Wrapped module with automatic profiling
+</ResponseField>
+
+##### get_summary()
+
+Get profiling summary.
+
+```python
+summary = profiler.get_summary()
+```
+
+##### clear()
+
+Clear profiling results.
+
+```python
+profiler.clear()
+```
+
+##### save_results()
+
+Save profiling results to file.
+
+```python
+profiler.save_results("profile_results.json")
+```
+
+<ParamField path="filename" type="str">
+  Output filename
+</ParamField>
+
+##### load_results()
+
+Load profiling results from file.
+
+```python
+data = profiler.load_results("profile_results.json")
+```
+
+<ParamField path="filename" type="str">
+  Input filename
+</ParamField>
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Loaded profiling data
+</ResponseField>
+
+#### Context Manager Support
+
+```python
+with MemoryProfiler() as profiler:
+    profiler.start_monitoring()
+    # ... code ...
+```
+
+## Example Usage
+
+```python
+import torch
+from gpumemprof import (
+    profile_function,
+    profile_context,
+    ProfiledModule,
+    MemoryProfiler
+)
+
+# Decorator pattern
+@profile_function(name="data_processing")
+def process_data(data):
+    return data.cuda() * 2
+
+# Context manager pattern
+with profile_context("model_forward"):
+    output = model(input_data)
+
+# Module wrapping
+profiled_model = ProfiledModule(model, name="resnet")
+output = profiled_model(data)  # Automatically profiled
+
+# High-level profiler
+profiler = MemoryProfiler()
+profiler.start_monitoring()
+
+with profiler.context("training_epoch"):
+    for batch in dataloader:
+        loss = train_step(batch)
+
+profiler.stop_monitoring()
+summary = profiler.get_summary()
+profiler.save_results("training_profile.json")
+```

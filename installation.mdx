@@ -1,0 +1,313 @@
+---
+title: Installation
+description: Install GPU Memory Profiler via pip or from source with optional dependencies
+---
+
+## Install from PyPI
+
+The simplest way to install GPU Memory Profiler is from PyPI:
+
+```bash
+pip install gpu-memory-profiler
+```
+
+<Note>
+The base installation includes core profiling functionality for both PyTorch and TensorFlow. Framework-specific and visualization dependencies are optional.
+</Note>
+
+## Optional dependencies
+
+GPU Memory Profiler supports several optional dependency groups that you can install based on your needs:
+
+### Visualization support
+
+For generating plots, charts, and interactive dashboards:
+
+```bash
+pip install gpu-memory-profiler[viz]
+```
+
+<Accordion title="Included packages">
+- matplotlib>=3.3.0
+- seaborn>=0.11.0
+- plotly>=5.0.0
+- dash>=2.0.0
+- dash-bootstrap-components>=1.6.0
+</Accordion>
+
+### Framework extras
+
+Install framework-specific dependencies:
+
+<CodeGroup>
+```bash PyTorch
+pip install gpu-memory-profiler[torch]
+```
+
+```bash TensorFlow
+pip install gpu-memory-profiler[tf]
+```
+
+```bash Both frameworks
+pip install gpu-memory-profiler[all]
+```
+</CodeGroup>
+
+### Terminal UI
+
+For the interactive Textual dashboard:
+
+```bash
+pip install gpu-memory-profiler[tui]
+```
+
+<Accordion title="Included packages">
+- textual>=0.57.0
+- pyfiglet>=1.0.2
+</Accordion>
+
+### Development tools
+
+For contributing to the project:
+
+```bash
+pip install gpu-memory-profiler[dev]
+```
+
+<Accordion title="Included packages">
+- pytest>=8.0.0
+- pytest-cov>=2.10.0
+- black>=21.0.0
+- flake8>=3.8.0
+- mypy>=0.910
+- isort>=5.9.0
+- pre-commit>=2.15.0
+- And more development dependencies
+</Accordion>
+
+### Testing dependencies
+
+For running the test suite:
+
+```bash
+pip install gpu-memory-profiler[test]
+```
+
+### Combined installation
+
+You can combine multiple extras in a single command:
+
+```bash
+# Install with visualization and PyTorch support
+pip install gpu-memory-profiler[viz,torch]
+
+# Install with all frameworks and TUI
+pip install gpu-memory-profiler[all,tui,viz]
+
+# Install everything including dev tools
+pip install gpu-memory-profiler[all,viz,tui,dev]
+```
+
+## Install from source
+
+For the latest development version or to contribute to the project:
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/Silas-Asamoah/gpu-memory-profiler.git
+    cd gpu-memory-profiler
+    ```
+  </Step>
+  
+  <Step title="Install in development mode">
+    ```bash
+    # Basic installation
+    pip install -e .
+    
+    # With optional dependencies
+    pip install -e .[viz,torch,tui]
+    ```
+    
+    <Note>
+    The `-e` flag installs the package in editable mode, so changes to the source code are immediately reflected.
+    </Note>
+  </Step>
+  
+  <Step title="Verify installation">
+    ```bash
+    python -c "import gpumemprof; print(gpumemprof.__version__)"
+    python -c "import tfmemprof; print(tfmemprof.__version__)"
+    ```
+  </Step>
+</Steps>
+
+## Development setup
+
+For active development with all tools:
+
+<Steps>
+  <Step title="Set up virtual environment">
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
+  </Step>
+  
+  <Step title="Install with dev dependencies">
+    ```bash
+    pip install -e .[dev,test,all]
+    ```
+  </Step>
+  
+  <Step title="Install pre-commit hooks">
+    ```bash
+    pre-commit install
+    ```
+    
+    <Note>
+    This sets up automatic code formatting and linting on commit.
+    </Note>
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    pytest tests/
+    ```
+  </Step>
+</Steps>
+
+## System requirements
+
+### Required
+
+- **Python:** 3.10 or later
+- **Operating System:** Linux, macOS, or Windows
+- **Core dependencies:**
+  - numpy>=1.19.0
+  - pandas>=1.2.0
+  - psutil>=5.8.0
+  - scipy>=1.7.0
+
+### Optional
+
+- **CUDA-capable GPU:** For GPU memory profiling (automatic fallback to CPU mode)
+- **PyTorch:** 1.8+ for PyTorch profiling
+- **TensorFlow:** 2.4+ for TensorFlow profiling
+- **CUDA Toolkit:** Recommended for GPU support
+
+## Verify GPU support
+
+Check if CUDA is available:
+
+<CodeGroup>
+```python PyTorch
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU: {torch.cuda.get_device_name(0)}")
+    print(f"CUDA version: {torch.version.cuda}")
+```
+
+```python TensorFlow
+import tensorflow as tf
+print(f"GPUs available: {len(tf.config.list_physical_devices('GPU'))}")
+for gpu in tf.config.list_physical_devices('GPU'):
+    print(f"GPU: {gpu}")
+```
+</CodeGroup>
+
+## CPU compatibility mode
+
+<Info>
+Don't have a GPU? No problem! GPU Memory Profiler automatically falls back to CPU memory profiling using psutil when CUDA is not available.
+</Info>
+
+The CPU compatibility mode provides:
+- RSS (Resident Set Size) memory tracking
+- Same API as GPU profiling
+- CSV/JSON export functionality
+- Full CLI and TUI support
+
+```bash
+# Works on any system, with or without GPU
+gpumemprof monitor --interval 1.0
+```
+
+## Command-line tools
+
+After installation, three command-line tools are available:
+
+<CardGroup cols={3}>
+  <Card title="gpumemprof" icon="terminal">
+    PyTorch profiling CLI
+    ```bash
+    gpumemprof --help
+    ```
+  </Card>
+  
+  <Card title="tfmemprof" icon="terminal">
+    TensorFlow profiling CLI
+    ```bash
+    tfmemprof --help
+    ```
+  </Card>
+  
+  <Card title="gpu-profiler" icon="display">
+    Interactive TUI dashboard
+    ```bash
+    gpu-profiler
+    ```
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ModuleNotFoundError: No module named 'torch'">
+    PyTorch is required for GPU profiling features. Install it with:
+    ```bash
+    pip install gpu-memory-profiler[torch]
+    ```
+    Or follow the official PyTorch installation guide: https://pytorch.org/get-started/locally/
+  </Accordion>
+  
+  <Accordion title="ModuleNotFoundError: No module named 'tensorflow'">
+    TensorFlow is required for TF profiling features. Install it with:
+    ```bash
+    pip install gpu-memory-profiler[tf]
+    ```
+    Or follow the official TensorFlow installation guide.
+  </Accordion>
+  
+  <Accordion title="ImportError: visualization dependencies missing">
+    Visualization features require optional dependencies. Install with:
+    ```bash
+    pip install gpu-memory-profiler[viz]
+    ```
+  </Accordion>
+  
+  <Accordion title="CUDA not available">
+    If you have a CUDA-capable GPU but `torch.cuda.is_available()` returns `False`:
+    
+    1. Verify CUDA drivers are installed: `nvidia-smi`
+    2. Install PyTorch with CUDA support:
+       ```bash
+       pip install torch --index-url https://download.pytorch.org/whl/cu118
+       ```
+    3. Check CUDA compatibility with your GPU
+    
+    Alternatively, use CPU compatibility mode (automatic fallback).
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick start guide" icon="rocket" href="/quickstart">
+    Get your first memory profile running in 5 minutes
+  </Card>
+  <Card title="CLI reference" icon="book" href="/guides/cli-usage">
+    Learn about all available command-line options
+  </Card>
+</CardGroup>

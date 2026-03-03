@@ -1,0 +1,359 @@
+---
+title: Telemetry export
+description: Export memory profiling data for analysis and monitoring
+---
+
+The GPU Memory Profiler provides structured telemetry export capabilities, allowing you to export memory tracking data in standardized formats (JSON, CSV) for analysis, monitoring, and integration with other tools.
+
+## Export formats
+
+The tracker supports multiple export formats:
+
+### JSON export
+
+Export events as structured JSON:
+
+```python
+from gpumemprof.tracker import MemoryTracker
+
+tracker = MemoryTracker(sampling_interval=0.1)
+tracker.start_tracking()
+
+# Run your workload
+for step in range(100):
+    # ... your code ...
+    pass
+
+tracker.stop_tracking()
+
+# Export to JSON
+tracker.export_events("tracking_events.json", format="json")
+```
+
+See tracking_demo.py:119-120
+
+### CSV export
+
+Export events as CSV for spreadsheet analysis:
+
+```python
+# Export to CSV
+tracker.export_events("tracking_events.csv", format="csv")
+```
+
+See tracking_demo.py:119 and cpu_telemetry_scenario.py:67-68
+
+## Telemetry schema v2
+
+All exported events use a standardized schema:
+
+```json
+{
+  "schema_version": 2,
+  "timestamp_ns": 1709480430123456789,
+  "event_type": "sample",
+  "collector": "gpumemprof.cuda_tracker",
+  "sampling_interval_ms": 100,
+  "pid": 12345,
+  "host": "gpu-server-01",
+  "device_id": 0,
+  "allocator_allocated_bytes": 2147483648,
+  "allocator_reserved_bytes": 2415919104,
+  "allocator_active_bytes": 2013265920,
+  "allocator_inactive_bytes": 134217728,
+  "allocator_change_bytes": 67108864,
+  "device_used_bytes": 2147483648,
+  "device_free_bytes": 14737418240,
+  "device_total_bytes": 17179869184,
+  "context": "training.epoch_5.batch_42",
+  "metadata": {
+    "batch_size": 32,
+    "learning_rate": 0.001
+  }
+}
+```
+
+See telemetry.py:37-59
+
+## Schema fields
+
+### Core fields
+
+- **schema_version**: Always `2` for the current schema
+- **timestamp_ns**: Nanosecond-precision timestamp
+- **event_type**: Event type (`sample`, `allocation`, `oom`, etc.)
+- **collector**: Source collector identifier
+- **sampling_interval_ms**: Sampling interval in milliseconds
+
+### Process context
+
+- **pid**: Process ID
+- **host**: Hostname
+- **device_id**: GPU device ID (or -1 for CPU)
+
+### Allocator metrics
+
+- **allocator_allocated_bytes**: Bytes allocated by PyTorch/TensorFlow
+- **allocator_reserved_bytes**: Bytes reserved by the allocator
+- **allocator_active_bytes**: Currently active allocations
+- **allocator_inactive_bytes**: Reserved but inactive memory
+- **allocator_change_bytes**: Change since last event
+
+### Device metrics
+
+- **device_used_bytes**: Total device memory in use
+- **device_free_bytes**: Free device memory
+- **device_total_bytes**: Total device memory
+
+### Contextual data
+
+- **context**: User-defined context string
+- **metadata**: Additional key-value metadata
+
+See telemetry.py:14-33
+
+## Load and validate telemetry
+
+Load exported telemetry files:
+
+```python
+from gpumemprof.telemetry import load_telemetry_events, validate_telemetry_record
+import json
+from pathlib import Path
+
+# Load from JSON
+events = load_telemetry_events("tracking_events.json")
+
+print(f"Loaded {len(events)} events")
+
+# Validate each event
+for event in events:
+    event_dict = telemetry_event_to_dict(event)
+    validate_telemetry_record(event_dict)
+
+print("All events valid!")
+```
+
+See telemetry.py:509-547 and cpu_telemetry_scenario.py:70-72
+
+## CPU telemetry
+
+Export CPU memory tracking:
+
+```python
+from gpumemprof import CPUMemoryProfiler, CPUMemoryTracker
+
+profiler = CPUMemoryProfiler()
+tracker = CPUMemoryTracker(sampling_interval=0.1)
+
+tracker.start_tracking()
+
+with profiler.profile_context("cpu_workload"):
+    # Your CPU workload
+    data = [bytearray(1024 * 1024) for _ in range(100)]
+    result = sum(len(d) for d in data)
+
+tracker.stop_tracking()
+
+# Export CPU telemetry
+tracker.export_events("cpu_events.json", format="json")
+tracker.export_events("cpu_events.csv", format="csv")
+```
+
+See cpu_telemetry_scenario.py:55-68
+
+## TensorFlow telemetry
+
+Export TensorFlow memory tracking:
+
+```python
+import tensorflow as tf
+from tfmemprof import TFMemoryProfiler
+
+profiler = TFMemoryProfiler(enable_tensor_tracking=True)
+
+# Run workload
+for epoch in range(5):
+    with profiler.profile_context(f"epoch_{epoch}"):
+        # Training code
+        pass
+
+# Get results
+results = profiler.get_results()
+
+# Export (if supported by the profiler)
+import json
+with open("tf_telemetry.json", "w") as f:
+    json.dump(results.to_dict(), f, indent=2)
+```
+
+## Legacy format conversion
+
+The telemetry loader supports legacy formats:
+
+```python
+from gpumemprof.telemetry import telemetry_event_from_record
+
+# Old format event
+legacy_event = {
+    "timestamp": 1709480430.123,  # Seconds (not nanoseconds)
+    "memory_allocated": 2147483648,
+    "memory_reserved": 2415919104,
+    "device": "cuda:0",
+    "context": "training"
+}
+
+# Convert to v2
+v2_event = telemetry_event_from_record(
+    legacy_event,
+    permissive_legacy=True,
+    default_collector="legacy.unknown"
+)
+
+print(f"Converted: {v2_event.timestamp_ns}")
+print(f"Allocated: {v2_event.allocator_allocated_bytes}")
+```
+
+See telemetry.py:395-493
+
+## Export profiler summaries
+
+Export high-level profiling summaries:
+
+```python
+from gpumemprof import GPUMemoryProfiler
+import json
+
+profiler = GPUMemoryProfiler(track_tensors=True)
+
+# Profile operations
+for i in range(10):
+    with profiler.profile_context(f"operation_{i}"):
+        # ... your code ...
+        pass
+
+# Get summary
+summary = profiler.get_summary()
+
+# Export summary
+with open("profiler_summary.json", "w") as f:
+    json.dump({
+        "summary": summary,
+        "results": [r.to_dict() for r in profiler.results],
+        "snapshots": [s.to_dict() for s in profiler.snapshots]
+    }, f, indent=2)
+```
+
+See context_profiler.py:189-202
+
+## Timeline visualization
+
+Extract and visualize memory timelines:
+
+```python
+from gpumemprof.tracker import MemoryTracker
+import matplotlib.pyplot as plt
+
+tracker = MemoryTracker(sampling_interval=0.1)
+tracker.start_tracking()
+
+# Run workload
+# ...
+
+tracker.stop_tracking()
+
+# Get timeline
+timeline = tracker.get_memory_timeline(interval=0.5)
+
+# Plot
+times = [t - timeline["timestamps"][0] for t in timeline["timestamps"]]
+allocated_gb = [value / (1024**3) for value in timeline["allocated"]]
+reserved_gb = [value / (1024**3) for value in timeline["reserved"]]
+
+plt.figure(figsize=(12, 6))
+plt.plot(times, allocated_gb, label="Allocated", linewidth=2)
+plt.plot(times, reserved_gb, label="Reserved", linewidth=2, linestyle="--")
+plt.xlabel("Time (s)")
+plt.ylabel("Memory (GB)")
+plt.title("GPU Memory Usage Timeline")
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.savefig("memory_timeline.png", dpi=200)
+```
+
+See tracking_demo.py:122-146
+
+## Integration with monitoring systems
+
+Export to monitoring systems:
+
+```python
+import json
+import requests
+from gpumemprof.telemetry import telemetry_event_to_dict
+
+def export_to_monitoring(events, endpoint):
+    """Export telemetry events to a monitoring endpoint."""
+    payload = [
+        telemetry_event_to_dict(event)
+        for event in events
+    ]
+    
+    response = requests.post(
+        endpoint,
+        json={"events": payload},
+        headers={"Content-Type": "application/json"}
+    )
+    
+    return response.status_code == 200
+
+# Load events
+events = load_telemetry_events("tracking_events.json")
+
+# Export to monitoring
+success = export_to_monitoring(
+    events,
+    "https://monitoring.example.com/api/metrics"
+)
+```
+
+## Statistics export
+
+Export tracker statistics:
+
+```python
+from gpumemprof.tracker import MemoryTracker
+import json
+
+tracker = MemoryTracker(sampling_interval=0.1)
+tracker.start_tracking()
+
+# Run workload
+# ...
+
+tracker.stop_tracking()
+
+# Get statistics
+stats = tracker.get_statistics()
+
+# Export
+with open("tracker_stats.json", "w") as f:
+    json.dump({
+        "tracking_duration_seconds": stats["tracking_duration_seconds"],
+        "total_events": stats["total_events"],
+        "peak_memory": stats["peak_memory"],
+        "alert_count": stats["alert_count"],
+        "total_allocations": stats["total_allocations"],
+        "total_deallocations": stats["total_deallocations"],
+    }, f, indent=2)
+
+print(f"Exported stats: {stats['total_events']} events")
+```
+
+See tracking_demo.py:100-110 and cpu_telemetry_scenario.py:74-89
+
+## Next steps
+
+- Debug OOM errors with [OOM recording](/examples/oom-recorder)
+- Detect memory leaks with [leak detection](/examples/leak-detection)
+- Learn about [basic profiling](/examples/basic-profiling) to get started

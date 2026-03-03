@@ -1,0 +1,423 @@
+---
+title: Utils
+description: Utility functions for TensorFlow memory profiling
+---
+
+## Memory formatting
+
+### format_memory
+
+Format memory size in human-readable format.
+
+```python
+def format_memory(bytes_value: Optional[Union[int, float]]) -> str
+```
+
+<ParamField path="bytes_value" type="Union[int, float]" optional>
+  Memory size in bytes
+</ParamField>
+
+<ResponseField name="str" type="str">
+  Formatted string (e.g., "2.50 GB", "512.00 MB")
+</ResponseField>
+
+**Example:**
+
+```python
+from tfmemprof.utils import format_memory
+
+print(format_memory(1024))           # "1.00 KB"
+print(format_memory(1024 * 1024))    # "1.00 MB"
+print(format_memory(2.5 * 1024**3))  # "2.50 GB"
+print(format_memory(None))           # "N/A"
+```
+
+## System information
+
+### get_gpu_info
+
+Get detailed GPU information for TensorFlow.
+
+```python
+def get_gpu_info() -> Dict[str, Any]
+```
+
+<ResponseField name="Dict[str, Any]" type="Dict[str, Any]">
+  <ResponseField name="available" type="bool">
+    Whether GPU is available
+  </ResponseField>
+  
+  <ResponseField name="count" type="int">
+    Number of GPUs detected
+  </ResponseField>
+  
+  <ResponseField name="devices" type="List[Dict]">
+    List of GPU device information
+  </ResponseField>
+  
+  <ResponseField name="driver_version" type="str">
+    GPU driver version
+  </ResponseField>
+  
+  <ResponseField name="cuda_version" type="str">
+    CUDA version
+  </ResponseField>
+  
+  <ResponseField name="total_memory" type="float">
+    Total GPU memory across all devices in MB
+  </ResponseField>
+</ResponseField>
+
+**Example:**
+
+```python
+from tfmemprof.utils import get_gpu_info
+
+info = get_gpu_info()
+print(f"GPU available: {info['available']}")
+print(f"GPU count: {info['count']}")
+print(f"Total memory: {info['total_memory']:.2f} MB")
+
+for device in info['devices']:
+    print(f"GPU {device['id']}: {device['current_memory_mb']:.2f} MB")
+```
+
+### get_system_info
+
+Get system and TensorFlow environment information.
+
+```python
+def get_system_info() -> Dict[str, Any]
+```
+
+<ResponseField name="Dict[str, Any]" type="Dict[str, Any]">
+  <ResponseField name="platform" type="str">
+    System platform
+  </ResponseField>
+  
+  <ResponseField name="python_version" type="str">
+    Python version
+  </ResponseField>
+  
+  <ResponseField name="tensorflow_version" type="str">
+    TensorFlow version
+  </ResponseField>
+  
+  <ResponseField name="cpu_count" type="int">
+    Number of CPU cores
+  </ResponseField>
+  
+  <ResponseField name="total_memory_gb" type="float">
+    Total system RAM in GB
+  </ResponseField>
+  
+  <ResponseField name="gpu" type="Dict">
+    GPU information from get_gpu_info()
+  </ResponseField>
+  
+  <ResponseField name="backend" type="BackendInfo">
+    Backend detection information
+  </ResponseField>
+</ResponseField>
+
+### get_backend_info
+
+Return backend diagnostics for TensorFlow.
+
+```python
+def get_backend_info() -> BackendInfo
+```
+
+<ResponseField name="BackendInfo" type="BackendInfo">
+  <ResponseField name="is_apple_silicon" type="bool">
+    Running on Apple Silicon (M1/M2)
+  </ResponseField>
+  
+  <ResponseField name="hardware_gpu_detected" type="bool">
+    GPU hardware detected
+  </ResponseField>
+  
+  <ResponseField name="runtime_gpu_count" type="int">
+    Number of GPUs visible to TensorFlow
+  </ResponseField>
+  
+  <ResponseField name="runtime_backend" type="str">
+    Backend type: 'cuda', 'rocm', 'metal', 'gpu', or 'cpu'
+  </ResponseField>
+  
+  <ResponseField name="is_cuda_build" type="bool">
+    TensorFlow built with CUDA
+  </ResponseField>
+  
+  <ResponseField name="is_rocm_build" type="bool">
+    TensorFlow built with ROCm
+  </ResponseField>
+  
+  <ResponseField name="is_tensorrt_build" type="bool">
+    TensorFlow built with TensorRT
+  </ResponseField>
+  
+  <ResponseField name="tensorflow_metal_installed" type="bool">
+    tensorflow-metal package installed
+  </ResponseField>
+</ResponseField>
+
+## Analysis utilities
+
+### analyze_fragmentation
+
+Analyze memory fragmentation from snapshots.
+
+```python
+def analyze_fragmentation(snapshots: List[MemorySnapshot]) -> Dict[str, float]
+```
+
+<ParamField path="snapshots" type="List[MemorySnapshot]">
+  List of memory snapshots
+</ParamField>
+
+<ResponseField name="Dict[str, float]" type="Dict[str, float]">
+  <ResponseField name="fragmentation_score" type="float">
+    Average fragmentation (0.0-1.0)
+  </ResponseField>
+  
+  <ResponseField name="fragmentation_trend" type="float">
+    Trend (positive = increasing fragmentation)
+  </ResponseField>
+  
+  <ResponseField name="max_fragmentation" type="float">
+    Maximum fragmentation observed
+  </ResponseField>
+  
+  <ResponseField name="min_fragmentation" type="float">
+    Minimum fragmentation observed
+  </ResponseField>
+</ResponseField>
+
+### suggest_optimizations
+
+Generate TensorFlow-specific optimization suggestions.
+
+```python
+def suggest_optimizations(profile_result: ProfileResult) -> List[str]
+```
+
+<ParamField path="profile_result" type="ProfileResult">
+  Profiling results
+</ParamField>
+
+<ResponseField name="List[str]" type="List[str]">
+  List of optimization suggestions (up to 10)
+</ResponseField>
+
+**Example:**
+
+```python
+from tfmemprof.utils import suggest_optimizations
+
+suggestions = suggest_optimizations(results)
+for i, suggestion in enumerate(suggestions, 1):
+    print(f"{i}. {suggestion}")
+```
+
+### generate_summary_report
+
+Generate a comprehensive summary report.
+
+```python
+def generate_summary_report(profile_result: ProfileResult) -> str
+```
+
+<ParamField path="profile_result" type="ProfileResult">
+  Profiling results
+</ParamField>
+
+<ResponseField name="str" type="str">
+  Formatted text report with statistics, analysis, and recommendations
+</ResponseField>
+
+**Example:**
+
+```python
+from tfmemprof.utils import generate_summary_report
+
+report = generate_summary_report(results)
+print(report)
+
+# Or save to file
+with open('memory_report.txt', 'w') as f:
+    f.write(report)
+```
+
+## TensorFlow utilities
+
+### get_tensorflow_memory_usage
+
+Get current TensorFlow memory usage.
+
+```python
+def get_tensorflow_memory_usage() -> Dict[str, float]
+```
+
+<ResponseField name="Dict[str, float]" type="Dict[str, float]">
+  <ResponseField name="gpu_current_mb" type="float">
+    Current GPU memory usage in MB
+  </ResponseField>
+  
+  <ResponseField name="gpu_peak_mb" type="float">
+    Peak GPU memory usage in MB
+  </ResponseField>
+  
+  <ResponseField name="cpu_mb" type="float">
+    CPU memory usage in MB
+  </ResponseField>
+</ResponseField>
+
+### optimize_tensorflow_memory
+
+Apply TensorFlow memory optimizations.
+
+```python
+def optimize_tensorflow_memory() -> List[str]
+```
+
+<ResponseField name="List[str]" type="List[str]">
+  List of optimizations applied
+</ResponseField>
+
+Applies:
+- Memory growth for all GPUs
+- Mixed precision training (if supported)
+- XLA compilation (if supported)
+
+**Example:**
+
+```python
+from tfmemprof.utils import optimize_tensorflow_memory
+
+applied = optimize_tensorflow_memory()
+for opt in applied:
+    print(f"✓ {opt}")
+```
+
+### clear_tensorflow_session
+
+Clear TensorFlow session and free memory.
+
+```python
+def clear_tensorflow_session() -> None
+```
+
+### validate_tensorflow_environment
+
+Validate TensorFlow environment for memory profiling.
+
+```python
+def validate_tensorflow_environment() -> Dict[str, Any]
+```
+
+<ResponseField name="Dict[str, Any]" type="Dict[str, Any]">
+  <ResponseField name="tensorflow_available" type="bool">
+    TensorFlow installed
+  </ResponseField>
+  
+  <ResponseField name="gpu_available" type="bool">
+    GPU available
+  </ResponseField>
+  
+  <ResponseField name="memory_growth_enabled" type="bool">
+    Memory growth successfully enabled
+  </ResponseField>
+  
+  <ResponseField name="version_compatible" type="bool">
+    TensorFlow version compatible (2.4+)
+  </ResponseField>
+  
+  <ResponseField name="issues" type="List[str]">
+    List of validation issues
+  </ResponseField>
+</ResponseField>
+
+**Example:**
+
+```python
+from tfmemprof.utils import validate_tensorflow_environment
+
+validation = validate_tensorflow_environment()
+
+if validation['tensorflow_available']:
+    print("✓ TensorFlow available")
+if validation['gpu_available']:
+    print("✓ GPU available")
+    
+if validation['issues']:
+    print("\nIssues found:")
+    for issue in validation['issues']:
+        print(f"  - {issue}")
+```
+
+## Complete example
+
+```python
+from tfmemprof.profiler import TFMemoryProfiler
+from tfmemprof.utils import (
+    format_memory,
+    get_system_info,
+    get_gpu_info,
+    analyze_fragmentation,
+    suggest_optimizations,
+    generate_summary_report,
+    optimize_tensorflow_memory,
+    validate_tensorflow_environment
+)
+
+# Validate environment
+validation = validate_tensorflow_environment()
+if not validation['tensorflow_available']:
+    print("Error: TensorFlow not available")
+    exit(1)
+
+# Get system info
+sys_info = get_system_info()
+print(f"TensorFlow {sys_info['tensorflow_version']}")
+print(f"Python {sys_info['python_version']}")
+
+gpu_info = get_gpu_info()
+if gpu_info['available']:
+    print(f"GPUs: {gpu_info['count']}")
+    print(f"Total GPU memory: {format_memory(gpu_info['total_memory'] * 1024 * 1024)}")
+
+# Apply optimizations
+print("\nApplying optimizations...")
+optimizations = optimize_tensorflow_memory()
+for opt in optimizations:
+    print(f"  ✓ {opt}")
+
+# Profile your code
+profiler = TFMemoryProfiler()
+
+with profiler.profile_context("training"):
+    # Your training code
+    pass
+
+results = profiler.get_results()
+
+# Analyze fragmentation
+frag = analyze_fragmentation(results.snapshots)
+print(f"\nFragmentation score: {frag['fragmentation_score']:.3f}")
+
+# Get suggestions
+suggestions = suggest_optimizations(results)
+print("\nOptimization suggestions:")
+for i, suggestion in enumerate(suggestions[:5], 1):
+    print(f"  {i}. {suggestion}")
+
+# Generate full report
+report = generate_summary_report(results)
+print("\n" + "="*50)
+print(report)
+
+# Save report
+with open('memory_analysis_report.txt', 'w') as f:
+    f.write(report)
+```

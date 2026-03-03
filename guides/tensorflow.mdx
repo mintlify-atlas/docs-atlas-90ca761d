@@ -1,0 +1,477 @@
+---
+title: TensorFlow profiling guide
+description: Step-by-step guide to profiling GPU memory usage in TensorFlow applications
+---
+
+This guide shows you how to profile and monitor GPU memory usage in TensorFlow applications using the GPU Memory Profiler.
+
+## Installation
+
+Install the TensorFlow profiler:
+
+```bash
+pip install gpu-memory-profiler
+pip install tensorflow  # or tensorflow-gpu
+```
+
+For Apple Silicon with Metal GPU support:
+
+```bash
+pip install tensorflow-metal
+```
+
+## Quick start
+
+Profile TensorFlow model training:
+
+```python
+from tfmemprof import TensorFlowProfiler
+import tensorflow as tf
+
+profiler = TensorFlowProfiler(device='/GPU:0')
+
+# Profile a training step
+with profiler.profile_context("training_step"):
+    with tf.GradientTape() as tape:
+        predictions = model(x_train, training=True)
+        loss = loss_fn(y_train, predictions)
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+# Get results
+results = profiler.get_results()
+print(f"Peak memory: {results.peak_memory_mb:.2f} MB")
+print(f"Duration: {results.duration:.2f}s")
+```
+
+## Core profiler
+
+The `TFMemoryProfiler` provides comprehensive memory profiling for TensorFlow:
+
+<Steps>
+  <Step title="Initialize the profiler">
+    Create a profiler instance:
+
+    ```python
+    from tfmemprof import TFMemoryProfiler
+
+    profiler = TFMemoryProfiler(
+        device='/GPU:0',              # TensorFlow device
+        enable_tensor_tracking=True   # Track tensor lifecycle
+    )
+    ```
+
+    For CPU-only profiling:
+
+    ```python
+    profiler = TFMemoryProfiler(device='/CPU:0')
+    ```
+  </Step>
+
+  <Step title="Profile with context manager">
+    Profile model training or inference:
+
+    ```python
+    # Profile model fitting
+    with profiler.profile_context("model_training"):
+        history = model.fit(
+            x_train, y_train,
+            epochs=10,
+            batch_size=32,
+            validation_split=0.2
+        )
+
+    # Get profiling results
+    results = profiler.get_results()
+    print(f"Peak memory: {results.peak_memory_mb:.2f} MB")
+    print(f"Average memory: {results.average_memory_mb:.2f} MB")
+    print(f"Memory growth rate: {results.memory_growth_rate:.2f} MB/s")
+    print(f"Snapshots collected: {len(results.snapshots)}")
+    ```
+  </Step>
+
+  <Step title="Profile individual functions">
+    Measure memory for specific operations:
+
+    ```python
+    def data_preprocessing(dataset):
+        # Augmentation and preprocessing
+        dataset = dataset.map(augment_fn)
+        dataset = dataset.batch(32)
+        dataset = dataset.prefetch(tf.data.AUTOTUNE)
+        return dataset
+
+    # Profile the function
+    result = profiler.profile_function(
+        data_preprocessing,
+        train_dataset
+    )
+
+    print(f"Function: {result['name']}")
+    print(f"Memory before: {result['memory_before_mb']:.2f} MB")
+    print(f"Memory after: {result['memory_after_mb']:.2f} MB")
+    print(f"Memory diff: {result['memory_diff_mb']:.2f} MB")
+    print(f"Execution time: {result['execution_time']:.3f}s")
+    ```
+  </Step>
+
+  <Step title="Real-time monitoring">
+    Monitor memory during long-running operations:
+
+    ```python
+    # Start monitoring
+    profiler.start_monitoring(interval=1.0)  # 1-second intervals
+
+    # Your training code
+    for epoch in range(num_epochs):
+        print(f"Epoch {epoch + 1}/{num_epochs}")
+        for batch in dataset:
+            train_step(model, batch)
+
+    # Stop monitoring
+    profiler.stop_monitoring()
+
+    # Get monitoring summary
+    snapshots = profiler.get_snapshots()
+    print(f"Collected {len(snapshots)} snapshots")
+
+    for snapshot in snapshots[-5:]:
+        print(f"GPU Memory: {snapshot.gpu_memory_mb:.2f} MB")
+        print(f"CPU Memory: {snapshot.cpu_memory_mb:.2f} MB")
+        print(f"GPU Utilization: {snapshot.gpu_utilization:.1f}%")
+    ```
+  </Step>
+</Steps>
+
+## Memory tracker
+
+Use `MemoryTracker` for real-time monitoring with alerts:
+
+```python
+from tfmemprof import MemoryTracker
+
+tracker = MemoryTracker(
+    sampling_interval=0.5,      # Sample every 500ms
+    alert_threshold_mb=4000,    # Alert at 4GB
+    device='/GPU:0',
+    enable_logging=True
+)
+
+# Add custom alert callback
+def handle_alert(alert):
+    print(f"Memory alert: {alert['message']}")
+    print(f"Current memory: {alert['current_memory_mb']:.2f} MB")
+    print(f"Threshold: {alert['threshold_mb']:.2f} MB")
+
+tracker.add_alert_callback(handle_alert)
+
+# Start tracking
+tracker.start_tracking()
+
+try:
+    # Your training loop
+    for epoch in range(epochs):
+        for step, (x_batch, y_batch) in enumerate(train_dataset):
+            train_step(model, x_batch, y_batch)
+            
+            # Check current memory
+            current_mem = tracker.get_current_memory()
+            if step % 100 == 0:
+                print(f"Step {step}: {current_mem:.1f} MB")
+finally:
+    # Stop tracking and get results
+    results = tracker.stop_tracking()
+    
+    print(f"\nTracking Results:")
+    print(f"Peak memory: {results.peak_memory:.1f} MB")
+    print(f"Average memory: {results.average_memory:.1f} MB")
+    print(f"Duration: {results.duration:.1f}s")
+    print(f"Samples collected: {len(results.memory_usage)}")
+    
+    if results.alerts_triggered:
+        print(f"Alerts triggered: {len(results.alerts_triggered)}")
+```
+
+## Backend detection
+
+Check TensorFlow GPU availability:
+
+<Tabs>
+  <Tab title="CUDA/ROCm">
+    For NVIDIA or AMD GPUs:
+
+    ```python
+    from tfmemprof import get_system_info
+    import tensorflow as tf
+
+    system_info = get_system_info()
+    
+    print(f"TensorFlow version: {system_info['tensorflow_version']}")
+    print(f"GPU available: {system_info['gpu']['available']}")
+    
+    if system_info['gpu']['available']:
+        print(f"GPU count: {system_info['gpu']['count']}")
+        print(f"Total GPU memory: {system_info['gpu']['total_memory']} MB")
+        
+        # List all GPU devices
+        gpus = tf.config.list_physical_devices('GPU')
+        for i, gpu in enumerate(gpus):
+            print(f"GPU {i}: {gpu.name}")
+    
+    backend = system_info['backend']
+    print(f"Runtime backend: {backend['runtime_backend']}")
+    print(f"CUDA build: {backend['is_cuda_build']}")
+    print(f"ROCm build: {backend['is_rocm_build']}")
+    ```
+  </Tab>
+
+  <Tab title="Metal (Apple Silicon)">
+    For Apple Silicon with Metal:
+
+    ```python
+    from tfmemprof import get_system_info
+    import tensorflow as tf
+
+    system_info = get_system_info()
+    backend = system_info['backend']
+    
+    print(f"Apple Silicon: {backend['is_apple_silicon']}")
+    print(f"Metal installed: {backend['tensorflow_metal_installed']}")
+    
+    if backend['is_apple_silicon']:
+        if not backend['tensorflow_metal_installed']:
+            print("Install tensorflow-metal for GPU acceleration:")
+            print("  pip install tensorflow-metal")
+        else:
+            print(f"GPU available: {system_info['gpu']['available']}")
+            print(f"Runtime GPU count: {backend['runtime_gpu_count']}")
+    ```
+  </Tab>
+
+  <Tab title="CPU fallback">
+    For CPU-only systems:
+
+    ```python
+    from tfmemprof import get_system_info
+
+    system_info = get_system_info()
+    
+    if not system_info['gpu']['available']:
+        print("GPU not available - using CPU profiling")
+        print(f"CPU count: {system_info['cpu_count']}")
+        print(f"Total memory: {system_info['total_memory_gb']:.2f} GB")
+        print(f"Available memory: {system_info['available_memory_gb']:.2f} GB")
+        
+        # Use CPU profiler
+        from gpumemprof import CPUMemoryProfiler
+        profiler = CPUMemoryProfiler()
+    ```
+  </Tab>
+</Tabs>
+
+## Memory analysis
+
+Analyze profiling results for optimization insights:
+
+```python
+from tfmemprof import MemoryAnalyzer
+
+analyzer = MemoryAnalyzer()
+
+# Analyze memory patterns
+patterns = analyzer.analyze_memory_patterns(profiling_result)
+print(f"Peak memory: {patterns['peak_memory_mb']:.2f} MB")
+print(f"Average growth: {patterns['average_growth_mb_per_step']:.2f} MB/step")
+
+# Detect memory leaks
+leaks = analyzer.detect_memory_leaks(tracking_result)
+if leaks:
+    print("\nPotential memory leaks detected:")
+    for leak in leaks:
+        print(f"  Type: {leak['type']}")
+        print(f"  Severity: {leak['severity']}")
+        print(f"  Description: {leak['description']}")
+        print(f"  Recommendation: {leak['recommendation']}")
+else:
+    print("No memory leaks detected")
+
+# Get optimization score
+optimization = analyzer.score_optimization(profiling_result)
+print(f"\nOptimization Score: {optimization['overall_score']:.1f}/10")
+print("\nCategory Scores:")
+for category, score in optimization['categories'].items():
+    print(f"  {category}: {score:.1f}/10")
+
+print("\nTop Recommendations:")
+for i, rec in enumerate(optimization['top_recommendations'], 1):
+    print(f"  {i}. {rec}")
+```
+
+## Decorator-based profiling
+
+Profile TensorFlow functions with decorators:
+
+```python
+from tfmemprof import profile_function
+
+@profile_function
+@tf.function
+def train_step(images, labels):
+    with tf.GradientTape() as tape:
+        predictions = model(images, training=True)
+        loss = loss_object(labels, predictions)
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+    return loss
+
+@profile_function(name="validation_step")
+@tf.function
+def validate_step(images, labels):
+    predictions = model(images, training=False)
+    v_loss = loss_object(labels, predictions)
+    return v_loss
+
+# Functions are automatically profiled
+for images, labels in train_dataset:
+    loss = train_step(images, labels)
+
+for images, labels in val_dataset:
+    val_loss = validate_step(images, labels)
+```
+
+## Export and visualization
+
+Export profiling data and generate visualizations:
+
+```python
+from tfmemprof import MemoryVisualizer
+import json
+
+# Export tracking data
+tracker.start_tracking()
+# ... run your code ...
+results = tracker.stop_tracking()
+
+# Save to JSON
+with open('tracking_results.json', 'w') as f:
+    json.dump({
+        'peak_memory': results.peak_memory,
+        'average_memory': results.average_memory,
+        'duration': results.duration,
+        'memory_usage': results.memory_usage,
+        'timestamps': results.timestamps,
+        'alerts': results.alerts_triggered
+    }, f, indent=2)
+
+print("Results saved to tracking_results.json")
+
+# Generate visualizations
+visualizer = MemoryVisualizer()
+
+# Memory timeline plot
+visualizer.plot_memory_timeline(
+    profiling_result,
+    save_path='memory_timeline.png'
+)
+
+# Memory distribution
+visualizer.plot_memory_distribution(
+    results.memory_usage,
+    save_path='memory_distribution.png'
+)
+
+print("Visualizations saved")
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Enable mixed precision">
+    Use mixed precision to reduce memory usage:
+
+    ```python
+    import tensorflow as tf
+
+    # Enable mixed precision
+    policy = tf.keras.mixed_precision.Policy('mixed_float16')
+    tf.keras.mixed_precision.set_global_policy(policy)
+
+    # Profile with mixed precision
+    with profiler.profile_context("mixed_precision_training"):
+        model.fit(x_train, y_train, epochs=10)
+    ```
+  </Accordion>
+
+  <Accordion title="Use gradient accumulation">
+    Reduce memory by accumulating gradients:
+
+    ```python
+    accumulation_steps = 4
+
+    @tf.function
+    def train_step_accumulated(images, labels):
+        with tf.GradientTape() as tape:
+            predictions = model(images, training=True)
+            loss = loss_object(labels, predictions) / accumulation_steps
+        gradients = tape.gradient(loss, model.trainable_variables)
+        return gradients, loss
+
+    accumulated_gradients = [
+        tf.Variable(tf.zeros_like(var), trainable=False)
+        for var in model.trainable_variables
+    ]
+
+    for step, (images, labels) in enumerate(train_dataset):
+        gradients, loss = train_step_accumulated(images, labels)
+        
+        # Accumulate gradients
+        for i, grad in enumerate(gradients):
+            accumulated_gradients[i].assign_add(grad)
+        
+        # Apply every N steps
+        if (step + 1) % accumulation_steps == 0:
+            optimizer.apply_gradients(
+                zip(accumulated_gradients, model.trainable_variables)
+            )
+            # Reset
+            for grad_var in accumulated_gradients:
+                grad_var.assign(tf.zeros_like(grad_var))
+    ```
+  </Accordion>
+
+  <Accordion title="Clear session between runs">
+    Clear Keras session to free memory:
+
+    ```python
+    import tensorflow as tf
+    from tensorflow import keras
+
+    # Before creating new model
+    keras.backend.clear_session()
+
+    # Create and train model
+    model = create_model()
+    model.fit(x_train, y_train)
+
+    # Clear again when done
+    keras.backend.clear_session()
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="CLI usage" icon="terminal" href="/guides/cli-usage">
+    Use tfmemprof from the command line
+  </Card>
+  <Card title="Visualization" icon="chart-line" href="/guides/visualization">
+    Generate plots and export profiling data
+  </Card>
+  <Card title="TUI dashboard" icon="window" href="/guides/tui-dashboard">
+    Use the interactive terminal dashboard
+  </Card>
+  <Card title="CPU mode" icon="microchip" href="/guides/cpu-mode">
+    Profile CPU memory when GPU is unavailable
+  </Card>
+</CardGroup>

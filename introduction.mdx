@@ -1,0 +1,154 @@
+---
+title: GPU Memory Profiler
+description: Production-ready GPU memory profiling, leak detection, and optimization for PyTorch and TensorFlow
+---
+
+<img src="https://raw.githubusercontent.com/Silas-Asamoah/gpu-memory-profiler/main/docs/gpu-profiler-overview.gif" alt="GPU Profiler TUI Demo" />
+
+A production-ready, open source tool for real-time GPU memory profiling, leak detection, and optimization in PyTorch and TensorFlow deep learning workflows.
+
+## Why GPU Memory Profiler?
+
+Training deep learning models often leads to out-of-memory crashes and inefficient resource usage. GPU Memory Profiler helps you understand exactly where your memory is going and how to optimize it.
+
+<CardGroup cols={2}>
+  <Card title="Prevent OOM crashes" icon="shield-halved">
+    Catch memory leaks and inefficiencies before they crash your training jobs
+  </Card>
+  <Card title="Optimize performance" icon="gauge-high">
+    Get actionable insights and recommendations for memory usage patterns
+  </Card>
+  <Card title="Unified interface" icon="layer-group">
+    Works seamlessly with both PyTorch and TensorFlow frameworks
+  </Card>
+  <Card title="Beautiful visualizations" icon="chart-line">
+    Timeline plots, heatmaps, and interactive dashboards for deep insights
+  </Card>
+</CardGroup>
+
+## Key features
+
+<AccordionGroup>
+  <Accordion title="Real-time monitoring" icon="display">
+    Track GPU memory usage in real-time with live dashboards and CLI tools. Monitor allocated memory, reserved memory, and memory fragmentation as your model trains.
+  </Accordion>
+  
+  <Accordion title="Memory leak detection" icon="droplet">
+    Automatic detection of memory leaks with configurable warning and critical thresholds. Get alerts when memory usage exceeds expected patterns.
+  </Accordion>
+  
+  <Accordion title="Context-aware profiling" icon="code">
+    Profile specific functions and code blocks using decorators and context managers. Understand memory usage at a granular level.
+  </Accordion>
+  
+  <Accordion title="Interactive visualizations" icon="chart-area">
+    Generate timeline plots, heatmaps, and interactive dashboards. Export data to CSV, JSON, PNG (Matplotlib), or HTML (Plotly) formats.
+  </Accordion>
+  
+  <Accordion title="CLI automation" icon="terminal">
+    Powerful command-line interface for profiling, monitoring, and diagnostics. Integrate into CI/CD pipelines and automated workflows.
+  </Accordion>
+  
+  <Accordion title="CPU compatibility mode" icon="microchip">
+    Works on laptops and CI agents without CUDA. Falls back to psutil-powered CPU memory tracking when GPU is not available.
+  </Accordion>
+</AccordionGroup>
+
+## Framework support
+
+<CodeGroup>
+```python PyTorch
+from gpumemprof import GPUMemoryProfiler
+
+profiler = GPUMemoryProfiler(track_tensors=True)
+
+with profiler.profile_context("training"):
+    output = model(data)
+    loss = criterion(output, target)
+    loss.backward()
+    optimizer.step()
+
+summary = profiler.get_summary()
+print(f"Peak memory: {summary['peak_memory_usage'] / (1024**3):.2f} GB")
+```
+
+```python TensorFlow
+from tfmemprof import TFMemoryProfiler
+
+profiler = TFMemoryProfiler(enable_tensor_tracking=True)
+
+with profiler.profile_context("training"):
+    model.fit(x_train, y_train, epochs=5)
+
+results = profiler.get_results()
+print(f"Peak memory: {results.peak_memory_mb:.2f} MB")
+```
+</CodeGroup>
+
+## Requirements
+
+- Python 3.10 or later
+- PyTorch 1.8+ (for PyTorch profiling)
+- TensorFlow 2.4+ (for TensorFlow profiling)
+- CUDA-capable GPU (optional - falls back to CPU mode)
+
+## Get started
+
+<CardGroup cols={3}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install via pip or from source with optional dependencies
+  </Card>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Get up and running with your first memory profile in 5 minutes
+  </Card>
+  <Card title="CLI usage" icon="terminal" href="/guides/cli-usage">
+    Learn about command-line tools and automation
+  </Card>
+</CardGroup>
+
+## Terminal UI
+
+Prefer an interactive dashboard? Install the optional TUI dependencies and launch the Textual interface:
+
+```bash
+pip install "gpu-memory-profiler[tui]"
+gpu-profiler
+```
+
+<Note>
+The TUI surfaces system info, PyTorch/TensorFlow quick actions, live monitoring with real-time charts, and CLI automation tools.
+</Note>
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Training optimization" icon="brain">
+    Profile your training loops to identify memory bottlenecks and optimize batch sizes
+  </Card>
+  <Card title="Leak detection" icon="magnifying-glass">
+    Find memory leaks in long-running training jobs before they cause crashes
+  </Card>
+  <Card title="Model debugging" icon="bug">
+    Debug out-of-memory errors with detailed snapshots and stack traces
+  </Card>
+  <Card title="Production monitoring" icon="server">
+    Monitor GPU memory usage in production deployments and inference services
+  </Card>
+</CardGroup>
+
+## Community
+
+<CardGroup cols={2}>
+  <Card title="GitHub" icon="github" href="https://github.com/Silas-Asamoah/gpu-memory-profiler">
+    View source code, report issues, and contribute
+  </Card>
+  <Card title="PyPI" icon="python" href="https://pypi.org/project/gpu-memory-profiler/">
+    Latest releases and package information
+  </Card>
+</CardGroup>
+
+<Note>
+**Current version:** 0.2.0 (launch candidate)
+
+**License:** MIT
+</Note>

@@ -1,0 +1,381 @@
+---
+title: Utils
+description: Utility functions for GPU memory profiling
+---
+
+The `utils` module provides helper functions for formatting, system information, and memory analysis.
+
+## Functions
+
+### format_bytes()
+
+Format bytes into human-readable format.
+
+```python
+from gpumemprof.utils import format_bytes
+
+print(format_bytes(1024))           # "1.00 KB"
+print(format_bytes(1536))           # "1.50 KB"
+print(format_bytes(5368709120))     # "5.00 GB"
+print(format_bytes(0))              # "0 B"
+print(format_bytes(1073741824, precision=3))  # "1.000 GB"
+```
+
+<ParamField path="bytes_value" type="int">
+  Number of bytes to format
+</ParamField>
+
+<ParamField path="precision" type="int" default="2">
+  Decimal precision for the output
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Formatted string (e.g., "1.25 GB")
+</ResponseField>
+
+---
+
+### convert_bytes()
+
+Convert between different byte units.
+
+```python
+from gpumemprof.utils import convert_bytes
+
+# Convert MB to GB
+gb = convert_bytes(5120, from_unit="MB", to_unit="GB")
+print(gb)  # 5.0
+
+# Convert bytes to MB
+mb = convert_bytes(1073741824, from_unit="B", to_unit="MB")
+print(mb)  # 1024.0
+
+# Convert GB to TB
+tb = convert_bytes(2048, from_unit="GB", to_unit="TB")
+print(tb)  # 2.0
+```
+
+<ParamField path="value" type="Union[int, float]">
+  Value to convert
+</ParamField>
+
+<ParamField path="from_unit" type="str">
+  Source unit: "B", "KB", "MB", "GB", or "TB"
+</ParamField>
+
+<ParamField path="to_unit" type="str">
+  Target unit: "B", "KB", "MB", "GB", or "TB"
+</ParamField>
+
+<ResponseField name="return" type="float">
+  Converted value
+</ResponseField>
+
+---
+
+### get_gpu_info()
+
+Get comprehensive GPU information.
+
+```python
+from gpumemprof.utils import get_gpu_info
+import torch
+
+info = get_gpu_info(device="cuda:0")
+
+print(f"Device: {info['device_name']}")
+print(f"Total memory: {info['total_memory'] / 1024**3:.2f} GB")
+print(f"CUDA version: {info['cuda_version']}")
+print(f"Current allocated: {info['allocated_memory'] / 1024**3:.2f} GB")
+print(f"Multiprocessors: {info['multiprocessor_count']}")
+
+if 'nvidia_smi_info' in info:
+    smi = info['nvidia_smi_info']
+    print(f"Temperature: {smi['temperature_c']}°C")
+    print(f"GPU utilization: {smi['gpu_utilization_percent']}%")
+```
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to query (None for current device)
+</ParamField>
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Dictionary with GPU information:
+  - `device_id`: Device identifier
+  - `device_name`: GPU model name
+  - `device_capability`: CUDA compute capability
+  - `total_memory`: Total GPU memory in bytes
+  - `multiprocessor_count`: Number of multiprocessors
+  - `cuda_version`: CUDA version
+  - `pytorch_version`: PyTorch version
+  - `allocated_memory`: Currently allocated memory
+  - `reserved_memory`: Reserved memory
+  - `max_memory_allocated`: Maximum allocated since reset
+  - `memory_stats`: Detailed memory statistics
+  - `nvidia_smi_info`: Additional info from nvidia-smi (if available)
+</ResponseField>
+
+---
+
+### get_system_info()
+
+Get system information relevant to GPU profiling.
+
+```python
+from gpumemprof.utils import get_system_info
+
+info = get_system_info()
+
+print(f"Platform: {info['platform']}")
+print(f"Architecture: {info['architecture']}")
+print(f"Python: {info['python_version']}")
+print(f"PyTorch available: {info['torch_available']}")
+print(f"CUDA available: {info['cuda_available']}")
+print(f"Detected backend: {info['detected_backend']}")
+
+if info['cuda_available']:
+    print(f"CUDA devices: {info['cuda_device_count']}")
+    print(f"CUDA version: {info['cuda_version']}")
+    print(f"cuDNN version: {info.get('cudnn_version')}")
+
+print(f"CPU count: {info['cpu_count']}")
+print(f"Total RAM: {info['memory_total'] / 1024**3:.2f} GB")
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  System information including:
+  - `platform`: Operating system
+  - `architecture`: CPU architecture
+  - `python_version`: Python version string
+  - `torch_available`: Whether PyTorch is available
+  - `cuda_available`: Whether CUDA is available
+  - `rocm_available`: Whether ROCm is available
+  - `rocm_version`: ROCm version (if available)
+  - `mps_available`: Whether MPS backend is available (macOS)
+  - `mps_built`: Whether MPS is built into PyTorch
+  - `detected_backend`: Auto-detected backend (cuda/rocm/mps/cpu)
+  - `cuda_device_count`: Number of CUDA devices
+  - `cuda_version`: CUDA version
+  - `cudnn_version`: cuDNN version
+  - `current_device`: Current CUDA device
+  - `cpu_count`: Physical CPU count
+  - `cpu_count_logical`: Logical CPU count
+  - `memory_total`: Total system RAM
+  - `memory_available`: Available system RAM
+  - `memory_percent`: RAM usage percentage
+</ResponseField>
+
+---
+
+### check_memory_fragmentation()
+
+Check GPU memory fragmentation.
+
+```python
+from gpumemprof.utils import check_memory_fragmentation
+
+frag = check_memory_fragmentation(device="cuda:0")
+
+print(f"Device: cuda:{frag['device_id']}")
+print(f"Total memory: {frag['total_memory_formatted']}")
+print(f"Allocated: {frag['allocated_memory_formatted']}")
+print(f"Reserved: {frag['reserved_memory_formatted']}")
+print(f"Fragmentation ratio: {frag['fragmentation_ratio']:.1%}")
+print(f"Utilization: {frag['utilization_ratio']:.1%}")
+print(f"Waste ratio: {frag['waste_ratio']:.1%}")
+```
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to check
+</ParamField>
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Fragmentation analysis:
+  - `device_id`: Device identifier
+  - `total_memory`: Total GPU memory
+  - `allocated_memory`: Allocated memory
+  - `reserved_memory`: Reserved memory
+  - `active_memory`: Active memory
+  - `inactive_memory`: Inactive memory
+  - `free_memory`: Free memory
+  - `fragmentation_ratio`: Fragmentation ratio (inactive/reserved)
+  - `utilization_ratio`: Memory utilization (allocated/total)
+  - `reservation_ratio`: Reservation ratio (reserved/total)
+  - `waste_ratio`: Wasted memory ratio
+  - `*_formatted`: Formatted versions of memory values
+</ResponseField>
+
+---
+
+### suggest_memory_optimization()
+
+Suggest memory optimization strategies.
+
+```python
+from gpumemprof.utils import check_memory_fragmentation, suggest_memory_optimization
+
+frag_info = check_memory_fragmentation()
+suggestions = suggest_memory_optimization(frag_info)
+
+print("Memory Optimization Suggestions:")
+for i, suggestion in enumerate(suggestions, 1):
+    print(f"{i}. {suggestion}")
+```
+
+<ParamField path="fragmentation_info" type="Dict[str, Any]">
+  Output from check_memory_fragmentation()
+</ParamField>
+
+<ResponseField name="return" type="List[str]">
+  List of optimization suggestions based on memory state
+</ResponseField>
+
+---
+
+### memory_summary()
+
+Generate a comprehensive memory summary.
+
+```python
+from gpumemprof.utils import memory_summary
+
+summary = memory_summary(device="cuda:0")
+print(summary)
+```
+
+Output:
+```
+============================================================
+GPU MEMORY SUMMARY
+============================================================
+Device: NVIDIA A100-SXM4-40GB (cuda:0)
+Total Memory: 40.00 GB
+
+Current Memory Usage:
+  Allocated: 5.23 GB
+  Reserved:  6.00 GB
+  Free:      34.00 GB
+
+Memory Ratios:
+  Utilization: 13.1%
+  Reservation: 15.0%
+  Fragmentation: 12.8%
+  Waste: 1.9%
+
+Optimization Suggestions:
+  1. Use torch.no_grad() context for inference...
+  2. Consider using mixed precision training...
+  ...
+============================================================
+```
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to summarize
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Formatted memory summary string
+</ResponseField>
+
+---
+
+### MemoryContext
+
+Context manager for tracking memory usage in a code block.
+
+```python
+from gpumemprof.utils import MemoryContext
+import torch
+
+with MemoryContext(name="data_loading", device="cuda:0") as ctx:
+    data = torch.randn(1000, 1000, device="cuda")
+    processed = data * 2
+
+summary = ctx.get_summary()
+print(f"Name: {summary['name']}")
+print(f"Memory diff: {summary['memory_diff_formatted']}")
+print(f"Peak memory: {summary['peak_memory_usage_formatted']}")
+print(f"Start: {summary['start_memory_formatted']}")
+print(f"End: {summary['end_memory_formatted']}")
+```
+
+#### Constructor
+
+<ParamField path="name" type="str" default="'memory_context'">
+  Name for this memory context
+</ParamField>
+
+<ParamField path="device" type="Optional[Union[str, int, torch.device]]" default="None">
+  GPU device to track
+</ParamField>
+
+#### Methods
+
+##### get_summary()
+
+Get memory usage summary for the context.
+
+```python
+summary = ctx.get_summary()
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Summary with:
+  - `name`: Context name
+  - `start_memory`: Starting memory
+  - `end_memory`: Ending memory
+  - `peak_memory`: Peak memory during context
+  - `memory_diff`: Net memory change
+  - `peak_memory_usage`: Peak usage above baseline
+  - `*_formatted`: Human-readable versions
+</ResponseField>
+
+## Example Usage
+
+```python
+import torch
+from gpumemprof.utils import (
+    format_bytes,
+    convert_bytes,
+    get_gpu_info,
+    get_system_info,
+    check_memory_fragmentation,
+    suggest_memory_optimization,
+    memory_summary,
+    MemoryContext
+)
+
+# Format bytes
+print(format_bytes(5368709120))  # "5.00 GB"
+
+# Convert units
+gb = convert_bytes(5120, "MB", "GB")  # 5.0
+
+# Get GPU info
+gpu_info = get_gpu_info()
+print(f"GPU: {gpu_info['device_name']}")
+print(f"Memory: {format_bytes(gpu_info['total_memory'])}")
+
+# System info
+sys_info = get_system_info()
+print(f"Backend: {sys_info['detected_backend']}")
+print(f"CUDA: {sys_info['cuda_available']}")
+
+# Check fragmentation
+frag = check_memory_fragmentation()
+if frag['fragmentation_ratio'] > 0.3:
+    print("High fragmentation detected!")
+    suggestions = suggest_memory_optimization(frag)
+    for suggestion in suggestions:
+        print(f"  - {suggestion}")
+
+# Full summary
+print(memory_summary())
+
+# Context tracking
+with MemoryContext("model_inference") as ctx:
+    model = MyModel().cuda()
+    output = model(input_data)
+
+print(f"Inference used: {ctx.get_summary()['memory_diff_formatted']}")
+```

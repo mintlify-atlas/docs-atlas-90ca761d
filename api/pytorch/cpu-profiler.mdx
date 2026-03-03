@@ -1,0 +1,424 @@
+---
+title: CPU profiler
+description: CPU-only memory profiler and tracker for non-GPU environments
+---
+
+The `cpu_profiler` module provides memory profiling for CPU-only environments, mirroring the GPU profiler API.
+
+## Classes
+
+### CPUMemorySnapshot
+
+Point-in-time CPU memory snapshot.
+
+```python
+from gpumemprof.cpu_profiler import CPUMemorySnapshot
+```
+
+#### Attributes
+
+<ParamField path="timestamp" type="float">
+  Unix timestamp when snapshot was taken
+</ParamField>
+
+<ParamField path="rss" type="int">
+  Resident Set Size (physical memory) in bytes
+</ParamField>
+
+<ParamField path="vms" type="int">
+  Virtual Memory Size in bytes
+</ParamField>
+
+<ParamField path="cpu_percent" type="float">
+  CPU utilization percentage
+</ParamField>
+
+#### Methods
+
+##### to_dict()
+
+Convert snapshot to dictionary.
+
+```python
+snapshot = CPUMemorySnapshot(...)
+data = snapshot.to_dict()
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Dictionary representation of the snapshot
+</ResponseField>
+
+---
+
+### CPUProfileResult
+
+Results from profiling a CPU function or context.
+
+```python
+from gpumemprof.cpu_profiler import CPUProfileResult
+```
+
+#### Attributes
+
+<ParamField path="name" type="str">
+  Name of the profiled function or context
+</ParamField>
+
+<ParamField path="duration" type="float">
+  Execution duration in seconds
+</ParamField>
+
+<ParamField path="snapshot_before" type="CPUMemorySnapshot">
+  Memory snapshot before execution
+</ParamField>
+
+<ParamField path="snapshot_after" type="CPUMemorySnapshot">
+  Memory snapshot after execution
+</ParamField>
+
+<ParamField path="peak_rss" type="int">
+  Peak RSS during execution in bytes
+</ParamField>
+
+#### Methods
+
+##### memory_diff()
+
+Calculate memory difference.
+
+```python
+result = profiler.profile_function(my_func)
+diff = result.memory_diff()
+```
+
+<ResponseField name="return" type="int">
+  RSS difference in bytes
+</ResponseField>
+
+##### to_dict()
+
+Convert result to dictionary.
+
+```python
+data = result.to_dict()
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Dictionary with profiling metrics
+</ResponseField>
+
+---
+
+### CPUMemoryProfiler
+
+Lightweight CPU memory profiler mirroring the GPU API.
+
+```python
+from gpumemprof.cpu_profiler import CPUMemoryProfiler
+
+profiler = CPUMemoryProfiler()
+```
+
+#### Methods
+
+##### profile_function()
+
+Profile a function execution.
+
+```python
+def compute_heavy(data):
+    result = [x * 2 for x in data]
+    return result
+
+result = profiler.profile_function(compute_heavy, large_data)
+print(f"Duration: {result.duration:.3f}s")
+print(f"Memory change: {result.memory_diff() / 1024**2:.2f} MB")
+```
+
+<ParamField path="func" type="Callable">
+  Function to profile
+</ParamField>
+
+<ParamField path="*args" type="Any">
+  Function arguments
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Function keyword arguments
+</ParamField>
+
+<ResponseField name="return" type="CPUProfileResult">
+  Profiling result
+</ResponseField>
+
+##### profile_context()
+
+Context manager for profiling code blocks.
+
+```python
+with profiler.profile_context("data_processing"):
+    data = [process(x) for x in items]
+```
+
+<ParamField path="name" type="str" default="'context'">
+  Name for the profiled context
+</ParamField>
+
+##### start_monitoring()
+
+Start continuous memory monitoring.
+
+```python
+profiler.start_monitoring(interval=0.5)
+# ... run code ...
+profiler.stop_monitoring()
+```
+
+<ParamField path="interval" type="float" default="0.1">
+  Monitoring interval in seconds
+</ParamField>
+
+##### stop_monitoring()
+
+Stop continuous memory monitoring.
+
+```python
+profiler.stop_monitoring()
+```
+
+##### clear_results()
+
+Clear all profiling results.
+
+```python
+profiler.clear_results()
+```
+
+##### get_summary()
+
+Get profiling summary.
+
+```python
+summary = profiler.get_summary()
+print(f"Peak memory: {summary['peak_memory_usage']}")
+print(f"Snapshots collected: {summary['snapshots_collected']}")
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Summary with mode='cpu', snapshots, peak memory, and baseline info
+</ResponseField>
+
+---
+
+### CPUMemoryTracker
+
+CPU tracker offering a superset of the GPU tracker interface.
+
+```python
+from gpumemprof.cpu_profiler import CPUMemoryTracker
+
+tracker = CPUMemoryTracker(
+    sampling_interval=0.5,
+    max_events=10000,
+    enable_alerts=True
+)
+```
+
+#### Constructor
+
+<ParamField path="sampling_interval" type="float" default="0.5">
+  Sampling interval in seconds
+</ParamField>
+
+<ParamField path="max_events" type="int" default="10000">
+  Maximum events to keep in ring buffer
+</ParamField>
+
+<ParamField path="enable_alerts" type="bool" default="True">
+  Whether to enable memory alerts
+</ParamField>
+
+#### Methods
+
+##### start_tracking()
+
+Start real-time CPU memory tracking.
+
+```python
+tracker.start_tracking()
+# ... run code ...
+tracker.stop_tracking()
+```
+
+##### stop_tracking()
+
+Stop tracking.
+
+```python
+tracker.stop_tracking()
+```
+
+##### get_events()
+
+Get tracking events with filtering.
+
+```python
+# All events
+events = tracker.get_events()
+
+# Filter by type
+allocations = tracker.get_events(event_type="allocation")
+
+# Last N events
+recent = tracker.get_events(last_n=50)
+
+# Since timestamp
+import time
+events = tracker.get_events(since=time.time() - 3600)
+```
+
+<ParamField path="event_type" type="Optional[str]" default="None">
+  Filter by event type
+</ParamField>
+
+<ParamField path="last_n" type="Optional[int]" default="None">
+  Get last N events
+</ParamField>
+
+<ParamField path="since" type="Optional[float]" default="None">
+  Get events since timestamp
+</ParamField>
+
+<ResponseField name="return" type="List[TrackingEvent]">
+  Filtered tracking events
+</ResponseField>
+
+##### get_statistics()
+
+Get tracking statistics.
+
+```python
+stats = tracker.get_statistics()
+print(f"Mode: {stats['mode']}")
+print(f"Peak memory: {stats['peak_memory']}")
+print(f"Current RSS: {stats['current_memory_allocated']}")
+```
+
+<ResponseField name="return" type="Dict[str, Any]">
+  Statistics including mode, peak memory, and duration
+</ResponseField>
+
+##### get_memory_timeline()
+
+Get memory usage timeline.
+
+```python
+timeline = tracker.get_memory_timeline(interval=1.0)
+print(f"Timestamps: {timeline['timestamps']}")
+print(f"Allocated: {timeline['allocated']}")
+```
+
+<ParamField path="interval" type="float" default="1.0">
+  Time interval for aggregation
+</ParamField>
+
+<ResponseField name="return" type="Dict[str, List[float]]">
+  Timeline with timestamps, allocated, and reserved lists
+</ResponseField>
+
+##### clear_events()
+
+Clear all events.
+
+```python
+tracker.clear_events()
+```
+
+##### export_events()
+
+Export events to file.
+
+```python
+# CSV export
+tracker.export_events("cpu_memory.csv", format="csv")
+
+# JSON export
+tracker.export_events("cpu_memory.json", format="json")
+```
+
+<ParamField path="filename" type="str">
+  Output filename
+</ParamField>
+
+<ParamField path="format" type="str" default="'csv'">
+  Export format: 'csv' or 'json'
+</ParamField>
+
+##### export_events_with_timestamp()
+
+Export events with automatic timestamped filename.
+
+```python
+filename = tracker.export_events_with_timestamp(
+    directory="./logs",
+    format="csv"
+)
+print(f"Exported to: {filename}")
+```
+
+<ParamField path="directory" type="str">
+  Output directory
+</ParamField>
+
+<ParamField path="format" type="str">
+  Export format
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Full path to exported file
+</ResponseField>
+
+## Example Usage
+
+```python
+from gpumemprof.cpu_profiler import (
+    CPUMemoryProfiler,
+    CPUMemoryTracker
+)
+
+# Profile individual functions
+profiler = CPUMemoryProfiler()
+
+def process_data(data):
+    return [x * 2 for x in data]
+
+result = profiler.profile_function(process_data, range(1000000))
+print(f"Duration: {result.duration:.3f}s")
+print(f"Memory change: {result.memory_diff() / 1024**2:.2f} MB")
+
+# Context-based profiling
+with profiler.profile_context("computation"):
+    large_list = [i ** 2 for i in range(1000000)]
+
+# Continuous tracking
+tracker = CPUMemoryTracker(sampling_interval=0.1)
+tracker.start_tracking()
+
+# Run your CPU-intensive code
+for i in range(100):
+    data = [x * 2 for x in range(10000)]
+
+tracker.stop_tracking()
+
+# Analyze results
+stats = tracker.get_statistics()
+print(f"Peak RSS: {stats['peak_memory'] / 1024**2:.2f} MB")
+print(f"Total events: {stats['total_events']}")
+
+# Export timeline
+tracker.export_events("cpu_profile.csv")
+
+# Get summary
+summary = profiler.get_summary()
+print(f"Snapshots collected: {summary['snapshots_collected']}")
+```

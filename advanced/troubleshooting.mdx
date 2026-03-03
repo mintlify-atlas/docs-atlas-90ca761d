@@ -1,0 +1,502 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for GPU Memory Profiler
+---
+
+This guide helps you resolve common issues with GPU Memory Profiler.
+
+## Common issues
+
+### Import errors
+
+<AccordionGroup>
+  <Accordion title="ModuleNotFoundError: No module named 'gpumemprof'">
+    **Solution:**
+
+    ```bash
+    # Install the package
+    pip install -e .
+
+    # Or install from PyPI
+    pip install gpu-memory-profiler
+    ```
+  </Accordion>
+
+  <Accordion title="ModuleNotFoundError: No module named 'torch'">
+    **Solution:**
+
+    ```bash
+    # Install PyTorch
+    pip install torch
+
+    # Or install with CUDA support
+    pip install torch --index-url https://download.pytorch.org/whl/cu118
+    ```
+  </Accordion>
+
+  <Accordion title="ModuleNotFoundError: No module named 'tensorflow'">
+    **Solution:**
+
+    ```bash
+    # Install TensorFlow (GPU support is included automatically)
+    pip install tensorflow
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### CUDA issues
+
+<AccordionGroup>
+  <Accordion title="CUDA not available">
+    **Symptoms:**
+    - Error: `CUDA not available`
+    - Profiler falls back to CPU mode
+
+    **Solutions:**
+
+    <Steps>
+      <Step title="Check CUDA installation">
+        ```bash
+        nvidia-smi
+        nvcc --version
+        ```
+      </Step>
+
+      <Step title="Verify PyTorch CUDA">
+        ```python
+        import torch
+        print(f"CUDA available: {torch.cuda.is_available()}")
+        print(f"CUDA version: {torch.version.cuda}")
+        ```
+      </Step>
+
+      <Step title="Verify TensorFlow CUDA">
+        ```python
+        import tensorflow as tf
+        print(f"GPU devices: {tf.config.list_physical_devices('GPU')}")
+        ```
+      </Step>
+
+      <Step title="Install CUDA-compatible versions">
+        ```bash
+        # PyTorch with CUDA
+        pip install torch --index-url https://download.pytorch.org/whl/cu118
+
+        # TensorFlow (GPU support is included automatically)
+        pip install tensorflow
+        ```
+      </Step>
+    </Steps>
+  </Accordion>
+
+  <Accordion title="CUDA out of memory">
+    **Symptoms:**
+    - Error: `CUDA out of memory`
+    - Training crashes
+
+    **Solutions:**
+
+    <Tabs>
+      <Tab title="Reduce batch size">
+        ```python
+        # Reduce batch size
+        dataloader = DataLoader(dataset, batch_size=16)  # Instead of 64
+        ```
+      </Tab>
+
+      <Tab title="Clear cache">
+        ```python
+        import torch
+        torch.cuda.empty_cache()
+        ```
+      </Tab>
+
+      <Tab title="Gradient checkpointing">
+        ```python
+        from torch.utils.checkpoint import checkpoint
+        # Wrap memory-heavy layers with checkpoint()
+        ```
+      </Tab>
+
+      <Tab title="Monitor memory">
+        ```python
+        from gpumemprof import GPUMemoryProfiler
+
+        profiler = GPUMemoryProfiler()
+        profiler.start_monitoring(interval=0.5)
+
+        # Your training code here
+        profiler.stop_monitoring()
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+</AccordionGroup>
+
+### Memory leak issues
+
+<Accordion title="Memory usage keeps increasing">
+  **Symptoms:**
+  - Memory usage grows over time
+  - Profiler detects memory leaks
+
+  **Solutions:**
+
+  <CodeGroup>
+    ```python Unreleased tensors
+    # Ensure tensors are properly deleted
+    del tensor
+    torch.cuda.empty_cache()
+    ```
+
+    ```python Context managers
+    with torch.no_grad():
+        # Inference code here
+        pass
+    ```
+
+    ```python Monitor with profiler
+    from gpumemprof import GPUMemoryProfiler
+
+    profiler = GPUMemoryProfiler()
+    profiler.start_monitoring(interval=0.5)
+
+    # Your code here
+    with profiler.profile_context("training_step"):
+        train_step()
+
+    profiler.stop_monitoring()
+    summary = profiler.get_summary()
+    print(f"Peak memory: {summary['peak_memory_usage'] / (1024**3):.2f} GB")
+    print(f"Memory change: {summary['memory_change_from_baseline'] / (1024**3):.2f} GB")
+    ```
+  </CodeGroup>
+</Accordion>
+
+### CLI issues
+
+<AccordionGroup>
+  <Accordion title="gpumemprof: command not found">
+    **Solution:**
+
+    ```bash
+    # Reinstall the package
+    pip install -e .
+
+    # Check if entry points are installed
+    pip show gpu-memory-profiler
+    ```
+  </Accordion>
+
+  <Accordion title="CLI commands fail">
+    **Solutions:**
+
+    <Steps>
+      <Step title="Check Python path">
+        ```bash
+        which python
+        which gpumemprof
+        ```
+      </Step>
+
+      <Step title="Reinstall with entry points">
+        ```bash
+        pip uninstall gpu-memory-profiler
+        pip install -e .
+        ```
+      </Step>
+
+      <Step title="Use Python module directly">
+        ```bash
+        python -m gpumemprof.cli info
+        python -m tfmemprof.cli info
+        ```
+      </Step>
+    </Steps>
+  </Accordion>
+</AccordionGroup>
+
+### Visualization issues
+
+<AccordionGroup>
+  <Accordion title="Plots don't display">
+    **Symptoms:**
+    - No plots appear
+    - Error: `No display name and no $DISPLAY environment variable`
+
+    **Solutions:**
+
+    <Tabs>
+      <Tab title="Non-interactive backend">
+        ```python
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend
+        ```
+      </Tab>
+
+      <Tab title="Save to files">
+        ```python
+        from gpumemprof import MemoryVisualizer
+
+        visualizer = MemoryVisualizer(profiler)
+        visualizer.plot_memory_timeline(interactive=False, save_path='timeline.png')
+        ```
+      </Tab>
+
+      <Tab title="Use Plotly">
+        ```python
+        from gpumemprof import MemoryVisualizer
+
+        visualizer = MemoryVisualizer(profiler)
+        visualizer.export_data(format='json', save_path='dashboard_data')
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="Dash visualization fails">
+    **Symptoms:**
+    - Error: `ImportError: No module named 'dash'`
+
+    **Solution:**
+
+    ```bash
+    pip install dash
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Performance issues
+
+<Accordion title="Profiler adds too much overhead">
+  **Symptoms:**
+  - Training is significantly slower
+  - High CPU usage
+
+  **Solutions:**
+
+  <CardGroup cols={3}>
+    <Card title="Increase sampling interval" icon="clock">
+      ```python
+      profiler = GPUMemoryProfiler()
+      profiler.start_monitoring(interval=2.0)  # Sample every 2 seconds
+      ```
+    </Card>
+    <Card title="Disable visualization" icon="eye-slash">
+      ```python
+      profiler = GPUMemoryProfiler(track_tensors=False)
+      ```
+    </Card>
+    <Card title="Selective profiling" icon="filter">
+      ```python
+      # Only profile specific functions
+      from gpumemprof import profile_function
+
+      @profile_function
+      def critical_function():
+          pass
+      ```
+    </Card>
+  </CardGroup>
+</Accordion>
+
+### Dependency conflicts
+
+<Accordion title="typing_extensions version conflict">
+  **Symptoms:**
+  - Error with TensorFlow CLI
+  - Version conflicts between packages
+
+  **Solutions:**
+
+  <Steps>
+    <Step title="Check versions">
+      ```bash
+      pip list | grep typing
+      ```
+    </Step>
+
+    <Step title="Install compatible version">
+      ```bash
+      pip install typing-extensions==4.5.0
+      ```
+    </Step>
+
+    <Step title="Use virtual environment">
+      ```bash
+      python -m venv venv
+      source venv/bin/activate  # On Windows: venv\Scripts\activate
+      pip install -e .
+      ```
+    </Step>
+  </Steps>
+</Accordion>
+
+### Platform-specific issues
+
+<AccordionGroup>
+  <Accordion title="macOS: CUDA not available">
+    **Solution:**
+
+    <Info>
+    CUDA is not available on macOS. Use CPU mode or MPS (Metal Performance Shaders) instead.
+    </Info>
+
+    ```bash
+    # Install PyTorch with MPS support
+    pip install torch torchvision
+    ```
+  </Accordion>
+
+  <Accordion title="macOS: TensorFlow issues on Apple Silicon">
+    **Solution:**
+
+    ```bash
+    # Install TensorFlow (Apple Silicon is supported natively since TF 2.13)
+    pip install tensorflow
+
+    # For Metal GPU acceleration, also install:
+    pip install tensorflow-metal
+    ```
+  </Accordion>
+
+  <Accordion title="Windows: Path issues">
+    **Solution:**
+
+    ```bash
+    # Use forward slashes or raw strings
+    python -m gpumemprof.cli info
+    ```
+  </Accordion>
+
+  <Accordion title="Windows: Permission issues">
+    **Solution:**
+
+    ```bash
+    # Run as administrator or use --user flag
+    pip install --user -e .
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Debug mode
+
+### Enable debug logging
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+from gpumemprof import GPUMemoryProfiler
+profiler = GPUMemoryProfiler()
+```
+
+### Verbose CLI output
+
+```bash
+# Use detailed/system output commands
+gpumemprof info --detailed
+gpumemprof monitor --duration 10
+```
+
+### Check system information
+
+<Tabs>
+  <Tab title="CLI">
+    ```bash
+    # Quickest way to check environment health
+    gpumemprof info --detailed
+    tfmemprof info
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from gpumemprof import get_gpu_info
+    info = get_gpu_info()  # Returns GPU details, or {"error": ...} on non-CUDA hosts
+    print(info)
+    ```
+  </Tab>
+</Tabs>
+
+## Getting help
+
+### Before asking for help
+
+<Steps>
+  <Step title="Check the documentation">
+    - [Installation guide](/installation)
+    - [Quick start](/quickstart)
+    - [PyTorch API reference](/api/pytorch/profiler)
+    - [TensorFlow API reference](/api/tensorflow/profiler)
+  </Step>
+
+  <Step title="Run diagnostics">
+    ```bash
+    gpumemprof info --detailed
+    gpumemprof diagnose --duration 0 --output ./diag_bundle
+    tfmemprof info
+    tfmemprof diagnose --duration 0 --output ./tf_diag_bundle
+    ```
+  </Step>
+
+  <Step title="Test with minimal example">
+    ```python
+    from gpumemprof import GPUMemoryProfiler
+    import torch
+
+    profiler = GPUMemoryProfiler()
+
+    def test():
+        return torch.randn(100, 100).cuda()
+
+    profile = profiler.profile_function(test)
+    summary = profiler.get_summary()
+    print(profile.to_dict())
+    print(summary)
+    ```
+  </Step>
+</Steps>
+
+### Reporting issues
+
+When reporting issues, include:
+
+<CardGroup cols={2}>
+  <Card title="System information" icon="computer">
+    - OS and version
+    - Python version
+    - PyTorch/TensorFlow versions
+    - CUDA version (if applicable)
+  </Card>
+  <Card title="Error messages" icon="triangle-exclamation">
+    - Full error traceback
+    - Any warning messages
+  </Card>
+  <Card title="Reproduction steps" icon="repeat">
+    - Minimal code example
+    - Expected vs actual behavior
+  </Card>
+  <Card title="Environment" icon="box">
+    - Virtual environment details
+    - Package versions (`pip freeze`)
+  </Card>
+</CardGroup>
+
+### Community support
+
+<CardGroup cols={3}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/Silas-Asamoah/gpu-memory-profiler/issues">
+    Report bugs and request features
+  </Card>
+  <Card title="Documentation" icon="book" href="/">
+    Browse the complete documentation
+  </Card>
+  <Card title="Examples" icon="code" href="https://github.com/Silas-Asamoah/gpu-memory-profiler/tree/main/examples">
+    Check out example code
+  </Card>
+</CardGroup>
+
+## See also
+
+- [Compatibility](/advanced/compatibility) - Framework and platform compatibility
+- [Architecture](/advanced/architecture) - System architecture overview

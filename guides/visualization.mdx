@@ -1,0 +1,587 @@
+---
+title: Visualization guide
+description: Generate plots, dashboards, and export profiling data for analysis
+---
+
+The GPU Memory Profiler includes comprehensive visualization tools for analyzing memory usage patterns through interactive plots and static images.
+
+## Installation
+
+Install with visualization support:
+
+```bash
+pip install "gpu-memory-profiler[viz]"
+```
+
+This includes:
+- Matplotlib (static plots)
+- Seaborn (styling)
+- Plotly (interactive visualizations)
+- Pandas (data export)
+- NumPy (data processing)
+
+## Quick start
+
+Generate visualizations from profiling data:
+
+```python
+from gpumemprof import GPUMemoryProfiler, MemoryVisualizer
+
+# Profile your code
+profiler = GPUMemoryProfiler()
+profiler.start_monitoring(interval=0.5)
+
+# Your training code here
+for epoch in range(10):
+    train_step(model, data)
+
+profiler.stop_monitoring()
+
+# Create visualizer
+visualizer = MemoryVisualizer(profiler)
+
+# Generate timeline plot
+fig = visualizer.plot_memory_timeline(
+    interactive=True,
+    save_path='memory_timeline.html'
+)
+visualizer.show(fig)
+```
+
+## Memory timeline
+
+Visualize memory usage over time:
+
+<Tabs>
+  <Tab title="Interactive (Plotly)">
+    ```python
+    from gpumemprof import MemoryVisualizer
+
+    visualizer = MemoryVisualizer(profiler)
+
+    # Create interactive timeline
+    fig = visualizer.plot_memory_timeline(
+        interactive=True,
+        save_path='timeline.html'
+    )
+
+    # Display in browser
+    visualizer.show(fig)
+    ```
+
+    Features:
+    - Hover tooltips with exact values
+    - Zoom and pan controls
+    - Operation labels on data points
+    - Separate allocated vs reserved traces
+    - Time in seconds from start
+  </Tab>
+
+  <Tab title="Static (Matplotlib)">
+    ```python
+    # Create static plot
+    fig = visualizer.plot_memory_timeline(
+        interactive=False,
+        save_path='timeline.png'
+    )
+
+    # Or customize appearance
+    visualizer.style_config['figure_size'] = (16, 10)
+    visualizer.style_config['dpi'] = 150
+    visualizer.style_config['color_palette'] = 'deep'
+
+    fig = visualizer.plot_memory_timeline(
+        interactive=False,
+        save_path='timeline_hires.png'
+    )
+    ```
+
+    The plot includes:
+    - Two subplots (allocated and reserved memory)
+    - Filled areas for visual emphasis
+    - Grid for readability
+    - Automatic GB conversion
+  </Tab>
+
+  <Tab title="Custom data">
+    ```python
+    # Plot specific results or snapshots
+    fig = visualizer.plot_memory_timeline(
+        results=profiler.results[-10:],  # Last 10 results
+        snapshots=profiler.snapshots,
+        interactive=True,
+        save_path='recent_timeline.html'
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Function comparison
+
+Compare memory usage across different functions:
+
+<Steps>
+  <Step title="Profile multiple functions">
+    ```python
+    from gpumemprof import profile_function
+
+    @profile_function
+    def forward_pass(model, data):
+        return model(data)
+
+    @profile_function
+    def backward_pass(model, loss):
+        loss.backward()
+
+    @profile_function
+    def optimizer_step(optimizer):
+        optimizer.step()
+        optimizer.zero_grad()
+
+    # Run training
+    for batch in dataloader:
+        output = forward_pass(model, batch)
+        loss = criterion(output, target)
+        backward_pass(model, loss)
+        optimizer_step(optimizer)
+    ```
+  </Step>
+
+  <Step title="Generate comparison plots">
+    ```python
+    from gpumemprof import get_global_profiler, MemoryVisualizer
+
+    profiler = get_global_profiler()
+    visualizer = MemoryVisualizer(profiler)
+
+    # Compare by memory allocation
+    fig = visualizer.plot_function_comparison(
+        metric='memory_allocated',
+        interactive=True,
+        save_path='function_memory.html'
+    )
+
+    # Compare by execution time
+    fig = visualizer.plot_function_comparison(
+        metric='execution_time',
+        interactive=True,
+        save_path='function_time.html'
+    )
+
+    # Compare by peak memory
+    fig = visualizer.plot_function_comparison(
+        metric='peak_memory',
+        interactive=False,
+        save_path='function_peak.png'
+    )
+    ```
+  </Step>
+
+  <Step title="Analyze results">
+    Available metrics:
+    - `memory_allocated`: Average memory allocated
+    - `execution_time`: Average execution duration
+    - `peak_memory`: Maximum memory usage
+
+    Each function's values are averaged across all calls.
+  </Step>
+</Steps>
+
+## Memory heatmap
+
+Create a heatmap showing memory patterns:
+
+```python
+from gpumemprof import MemoryVisualizer
+
+visualizer = MemoryVisualizer(profiler)
+
+# Generate heatmap
+fig = visualizer.plot_memory_heatmap(
+    save_path='memory_heatmap.png'
+)
+```
+
+The heatmap shows:
+- **Rows**: Different functions
+- **Columns**: Metrics
+  - Execution time
+  - Memory allocated (GB)
+  - Memory freed (GB)
+  - Peak memory (GB)
+- **Colors**: Normalized values (darker = higher)
+- **Annotations**: Actual values on each cell
+
+Useful for:
+- Identifying memory-intensive functions
+- Comparing memory patterns
+- Finding optimization opportunities
+
+## Interactive dashboard
+
+Create a comprehensive multi-panel dashboard:
+
+```python
+from gpumemprof import MemoryVisualizer
+
+visualizer = MemoryVisualizer(profiler)
+
+# Create dashboard with all visualizations
+fig = visualizer.create_dashboard(
+    save_path='dashboard.html'
+)
+
+# Display in browser
+visualizer.show(fig)
+```
+
+The dashboard includes:
+
+<Tabs>
+  <Tab title="Memory timeline">
+    Top-left panel:
+    - Time series of allocated memory
+    - Synchronized with other plots
+    - Hover for exact timestamps
+  </Tab>
+
+  <Tab title="Function comparison">
+    Top-right panel:
+    - Bar chart of average memory by function
+    - Sorted by memory usage
+    - Click to highlight in other panels
+  </Tab>
+
+  <Tab title="Memory distribution">
+    Bottom-left panel:
+    - Histogram of memory allocations
+    - Shows frequency distribution
+    - Identifies common allocation sizes
+  </Tab>
+
+  <Tab title="Peak vs time scatter">
+    Bottom-right panel:
+    - Scatter plot: execution time vs peak memory
+    - Each point is a profiled operation
+    - Reveals time-memory tradeoffs
+  </Tab>
+</Tabs>
+
+## Export data
+
+Export profiling data for external analysis:
+
+<Tabs>
+  <Tab title="CSV export">
+    ```python
+    from gpumemprof import MemoryVisualizer
+
+    visualizer = MemoryVisualizer(profiler)
+
+    # Export to CSV
+    path = visualizer.export_data(
+        format='csv',
+        save_path='memory_profile'
+    )
+
+    print(f"Data exported to: {path}")
+    # Output: memory_profile_results_20260303_142315.csv
+    #         memory_profile_snapshots_20260303_142315.csv
+    ```
+
+    **Results CSV:**
+    - function_name
+    - execution_time
+    - memory_allocated
+    - memory_freed
+    - peak_memory
+    - memory_diff
+    - tensors_created
+    - tensors_deleted
+
+    **Snapshots CSV:**
+    - timestamp
+    - operation
+    - allocated_memory
+    - reserved_memory
+    - active_memory
+    - inactive_memory
+    - device_id
+  </Tab>
+
+  <Tab title="JSON export">
+    ```python
+    # Export to JSON
+    path = visualizer.export_data(
+        format='json',
+        save_path='memory_profile'
+    )
+
+    print(f"Data exported to: {path}")
+    # Output: memory_profile_20260303_142315.json
+    ```
+
+    JSON structure:
+    ```json
+    {
+      "metadata": {
+        "export_time": "20260303_142315",
+        "num_results": 245,
+        "num_snapshots": 1200
+      },
+      "results": [
+        {
+          "function_name": "train_step",
+          "execution_time": 0.123,
+          "memory_allocated": 134217728,
+          "memory_freed": 67108864,
+          "peak_memory": 268435456,
+          "tensors_created": 12,
+          "tensors_deleted": 8
+        }
+      ],
+      "snapshots": [...]
+    }
+    ```
+  </Tab>
+
+  <Tab title="From tracker">
+    ```python
+    from gpumemprof import MemoryTracker
+
+    tracker = MemoryTracker(device='cuda:0')
+    tracker.start_tracking()
+
+    # Your code here
+
+    tracker.stop_tracking()
+
+    # Export tracker events
+    tracker.export_events('tracking.json', format='json')
+    tracker.export_events('tracking.csv', format='csv')
+    ```
+  </Tab>
+</Tabs>
+
+## Styling configuration
+
+Customize visualization appearance:
+
+```python
+from gpumemprof import MemoryVisualizer
+
+visualizer = MemoryVisualizer(profiler)
+
+# Modify style configuration
+visualizer.style_config = {
+    'figure_size': (16, 10),        # Width, height in inches
+    'dpi': 150,                     # Resolution
+    'color_palette': 'deep',        # Seaborn palette
+    'font_size': 12,                # Base font size
+    'title_size': 16,               # Title font size
+    'label_size': 14                # Axis label size
+}
+
+# Generate plots with custom style
+fig = visualizer.plot_memory_timeline(
+    interactive=False,
+    save_path='styled_timeline.png'
+)
+```
+
+Available color palettes:
+- `viridis` (default)
+- `deep`
+- `muted`
+- `bright`
+- `pastel`
+- `dark`
+- `colorblind`
+
+## TensorFlow visualizations
+
+Visualize TensorFlow profiling data:
+
+```python
+from tfmemprof import MemoryVisualizer
+
+visualizer = MemoryVisualizer()
+
+# Load tracking results
+import json
+with open('tf_tracking.json', 'r') as f:
+    data = json.load(f)
+
+# Create result object
+class TrackingResult:
+    def __init__(self, data):
+        self.peak_memory_mb = data['peak_memory']
+        self.average_memory_mb = data['average_memory']
+        self.duration = data['duration']
+        self.memory_usage = data['memory_usage']
+        self.timestamps = data['timestamps']
+        # Create fake snapshots
+        self.snapshots = []
+        for mem, ts in zip(self.memory_usage, self.timestamps):
+            snapshot = type('Snapshot', (), {
+                'timestamp': ts,
+                'gpu_memory_mb': mem,
+                'cpu_memory_mb': 0,
+                'gpu_utilization': min(100, mem / 1000 * 100),
+            })()
+            self.snapshots.append(snapshot)
+
+result = TrackingResult(data)
+
+# Generate timeline
+visualizer.plot_memory_timeline(
+    result,
+    save_path='tf_timeline.png'
+)
+```
+
+## Batch processing
+
+Generate multiple visualizations:
+
+```python
+from gpumemprof import MemoryVisualizer
+import os
+
+visualizer = MemoryVisualizer(profiler)
+output_dir = './visualizations'
+os.makedirs(output_dir, exist_ok=True)
+
+# Generate all visualization types
+visualizations = [
+    ('timeline', 'plot_memory_timeline', {'interactive': False}),
+    ('comparison', 'plot_function_comparison', {'metric': 'memory_allocated', 'interactive': False}),
+    ('heatmap', 'plot_memory_heatmap', {}),
+    ('dashboard', 'create_dashboard', {}),
+]
+
+for name, method, kwargs in visualizations:
+    print(f"Generating {name}...")
+    func = getattr(visualizer, method)
+    save_path = f"{output_dir}/{name}.png"
+    if name == 'dashboard':
+        save_path = f"{output_dir}/{name}.html"
+    
+    kwargs['save_path'] = save_path
+    fig = func(**kwargs)
+    print(f"  Saved to: {save_path}")
+
+print(f"\nAll visualizations saved to: {output_dir}")
+```
+
+## Analysis workflows
+
+<AccordionGroup>
+  <Accordion title="Memory leak detection">
+    Visualize memory growth over time:
+
+    ```python
+    # Long-running profiling
+    profiler.start_monitoring(interval=1.0)
+    
+    # Run many iterations
+    for i in range(1000):
+        train_step(model, data)
+    
+    profiler.stop_monitoring()
+    
+    # Generate timeline
+    visualizer = MemoryVisualizer(profiler)
+    fig = visualizer.plot_memory_timeline(
+        interactive=True,
+        save_path='leak_detection.html'
+    )
+    
+    # Look for:
+    # - Steadily increasing baseline
+    # - Growing reserved memory
+    # - Lack of memory release
+    ```
+  </Accordion>
+
+  <Accordion title="Optimization comparison">
+    Compare before/after optimization:
+
+    ```python
+    # Before optimization
+    profiler_before = GPUMemoryProfiler()
+    # ... profile unoptimized code ...
+    
+    # After optimization
+    profiler_after = GPUMemoryProfiler()
+    # ... profile optimized code ...
+    
+    # Compare
+    viz_before = MemoryVisualizer(profiler_before)
+    viz_after = MemoryVisualizer(profiler_after)
+    
+    fig_before = viz_before.plot_memory_timeline(
+        interactive=False,
+        save_path='before_opt.png'
+    )
+    fig_after = viz_after.plot_memory_timeline(
+        interactive=False,
+        save_path='after_opt.png'
+    )
+    
+    # Export for quantitative comparison
+    viz_before.export_data(format='json', save_path='before')
+    viz_after.export_data(format='json', save_path='after')
+    ```
+  </Accordion>
+
+  <Accordion title="Batch size tuning">
+    Visualize memory vs batch size:
+
+    ```python
+    import matplotlib.pyplot as plt
+    
+    batch_sizes = [8, 16, 32, 64, 128]
+    peak_memories = []
+    
+    for batch_size in batch_sizes:
+        profiler = GPUMemoryProfiler()
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+        
+        with profiler.profile_context(f"batch_{batch_size}"):
+            for batch in dataloader:
+                output = model(batch)
+                loss = criterion(output)
+                loss.backward()
+        
+        summary = profiler.get_summary()
+        peak_memories.append(summary['peak_memory_usage'] / (1024**3))
+    
+    # Plot batch size vs memory
+    plt.figure(figsize=(10, 6))
+    plt.plot(batch_sizes, peak_memories, 'o-', linewidth=2)
+    plt.xlabel('Batch Size')
+    plt.ylabel('Peak Memory (GB)')
+    plt.title('Memory Usage vs Batch Size')
+    plt.grid(True)
+    plt.savefig('batch_size_tuning.png', dpi=150)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="PyTorch guide" icon="fire" href="/guides/pytorch">
+    Learn PyTorch profiling APIs
+  </Card>
+  <Card title="TensorFlow guide" icon="brain" href="/guides/tensorflow">
+    Learn TensorFlow profiling APIs
+  </Card>
+  <Card title="CLI usage" icon="terminal" href="/guides/cli-usage">
+    Generate plots from CLI
+  </Card>
+  <Card title="TUI dashboard" icon="window" href="/guides/tui-dashboard">
+    Use the interactive TUI for visualizations
+  </Card>
+</CardGroup>

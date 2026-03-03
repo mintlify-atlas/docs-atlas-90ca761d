@@ -1,0 +1,475 @@
+---
+title: Out-of-memory detection
+description: Automatically capture diagnostics when OOM errors occur using the OOM flight recorder
+---
+
+## Overview
+
+The OOM (Out-of-Memory) flight recorder automatically captures comprehensive diagnostic information when GPU memory allocation fails. Similar to an airplane's black box, it maintains a rolling buffer of memory events and dumps them to disk when an OOM error is detected.
+
+## How it works
+
+The flight recorder operates in three stages:
+
+1. **Continuous recording** - Maintains a ring buffer of recent memory events
+2. **Exception classification** - Detects OOM errors from various frameworks
+3. **Diagnostic dump** - Writes comprehensive dump bundle when OOM occurs
+
+The system recognizes OOM errors from:
+- PyTorch (`torch.cuda.OutOfMemoryError`)
+- TensorFlow (`ResourceExhaustedError`)
+- Generic CUDA/HIP errors (via message pattern matching)
+
+See `oom_flight_recorder.py:51-79` for classification logic.
+
+## Enabling OOM capture
+
+### With MemoryTracker
+
+The easiest way to enable OOM capture is through `MemoryTracker`:
+
+```python
+from gpumemprof import MemoryTracker
+
+tracker = MemoryTracker(
+    device="cuda:0",
+    enable_oom_flight_recorder=True,  # Enable OOM capture
+    oom_dump_dir="oom_dumps",         # Where to save dumps
+    oom_buffer_size=10000,            # Events to include in dump
+    oom_max_dumps=5,                  # Keep max 5 dumps
+    oom_max_total_mb=256              # Max 256MB total storage
+)
+
+tracker.start_tracking()
+
+try:
+    # Code that might OOM
+    large_tensor = torch.randn(100000, 100000).cuda()
+except RuntimeError as e:
+    # Automatically captured if it's an OOM
+    dump_path = tracker.handle_exception(e, context="allocation")
+    if dump_path:
+        print(f"OOM diagnostics saved to: {dump_path}")
+    raise
+```
+
+### Context manager for automatic capture
+
+```python
+with tracker.capture_oom(context="training_step", metadata={"epoch": 5, "batch": 42}):
+    # Any OOM in this block is automatically captured
+    output = model(data)
+    loss = criterion(output, target)
+    loss.backward()
+```
+
+The context manager:
+- Catches any exception
+- Classifies it to determine if it's OOM-related
+- Captures diagnostics if OOM detected
+- Re-raises the original exception
+
+See `tracker.py:427-440` for implementation.
+
+## OOM exception classification
+
+The system automatically classifies exceptions to determine if they're OOM-related:
+
+```python
+from gpumemprof.oom_flight_recorder import classify_oom_exception
+
+try:
+    problematic_code()
+except Exception as e:
+    classification = classify_oom_exception(e)
+    
+    if classification.is_oom:
+        print(f"OOM detected: {classification.reason}")
+        # Take action: reduce batch size, save checkpoint, etc.
+    else:
+        print("Not an OOM error")
+```
+
+### Recognized OOM patterns
+
+The classifier recognizes:
+
+1. **PyTorch CUDA OOM**: `torch.cuda.OutOfMemoryError`
+2. **TensorFlow OOM**: `ResourceExhaustedError`
+3. **Message patterns**:
+   - "out of memory"
+   - "cuda out of memory"
+   - "hip out of memory"
+   - "resource exhausted"
+   - "failed to allocate"
+   - "allocation failed"
+
+See `oom_flight_recorder.py:22-29` for pattern definitions.
+
+## OOM dump contents
+
+Each OOM dump is saved as a directory bundle containing multiple JSON files:
+
+### manifest.json
+
+Metadata about the dump:
+
+```json
+{
+  "schema_version": 1,
+  "bundle_name": "oom_dump_20260303T142530Z_12345_cuda_1",
+  "created_at_utc": "2026-03-03T14:25:30Z",
+  "reason": "torch.cuda.OutOfMemoryError",
+  "backend": "cuda",
+  "event_count": 5000,
+  "files": [
+    "manifest.json",
+    "events.json",
+    "metadata.json",
+    "environment.json"
+  ]
+}
+```
+
+### events.json
+
+All captured tracking events leading up to the OOM:
+
+```json
+[
+  {
+    "timestamp": 1709476530.123,
+    "event_type": "allocation",
+    "memory_allocated": 4294967296,
+    "memory_reserved": 5368709120,
+    "memory_change": 134217728,
+    "device_id": 0,
+    "context": "Memory allocated: 128.00 MB",
+    "backend": "cuda"
+  },
+  // ... more events ...
+]
+```
+
+### metadata.json
+
+Exception details and custom metadata:
+
+```json
+{
+  "reason": "torch.cuda.OutOfMemoryError",
+  "exception_type": "OutOfMemoryError",
+  "exception_module": "torch.cuda",
+  "exception_message": "CUDA out of memory. Tried to allocate 2.00 GiB...",
+  "context": "training_step",
+  "backend": "cuda",
+  "captured_event_count": 5000,
+  "custom_metadata": {
+    "epoch": 5,
+    "batch": 42,
+    "sample_allocated_bytes": 4294967296,
+    "sample_reserved_bytes": 5368709120
+  }
+}
+```
+
+### environment.json
+
+System and environment information:
+
+```json
+{
+  "pid": 12345,
+  "cwd": "/home/user/project",
+  "system": {
+    "platform": "Linux-5.15.0-x86_64",
+    "python_version": "3.10.12",
+    "torch_version": "2.1.0",
+    "cuda_version": "12.1",
+    "gpu_count": 4,
+    "gpu_name": "NVIDIA A100-SXM4-40GB"
+  }
+}
+```
+
+See `oom_flight_recorder.py:122-157` for dump creation logic.
+
+## Dump retention management
+
+The flight recorder automatically manages disk usage:
+
+```python
+config = OOMFlightRecorderConfig(
+    enabled=True,
+    dump_dir="oom_dumps",
+    buffer_size=10000,     # Events per dump
+    max_dumps=5,           # Keep max 5 dump bundles
+    max_total_mb=256       # Max 256MB total storage
+)
+```
+
+### Retention policies
+
+Dumps are pruned automatically:
+
+1. **Count-based**: Keep only the most recent `max_dumps` bundles
+2. **Size-based**: Delete oldest dumps if total size exceeds `max_total_mb`
+
+Pruning happens after each dump is created. Oldest dumps (by modification time) are removed first. See `oom_flight_recorder.py:175-194` for pruning logic.
+
+## Direct flight recorder usage
+
+You can use the flight recorder directly without `MemoryTracker`:
+
+```python
+from gpumemprof.oom_flight_recorder import (
+    OOMFlightRecorder,
+    OOMFlightRecorderConfig,
+    classify_oom_exception
+)
+
+# Create recorder
+config = OOMFlightRecorderConfig(
+    enabled=True,
+    dump_dir="oom_dumps",
+    buffer_size=5000
+)
+recorder = OOMFlightRecorder(config)
+
+# Record events manually
+for step in training_loop:
+    event = {
+        "timestamp": time.time(),
+        "event_type": "allocation",
+        "memory_allocated": torch.cuda.memory_allocated(),
+        "memory_reserved": torch.cuda.memory_reserved(),
+        "context": f"step_{step}"
+    }
+    recorder.record_event(event)
+
+# Capture OOM
+try:
+    risky_operation()
+except Exception as e:
+    classification = classify_oom_exception(e)
+    if classification.is_oom:
+        dump_path = recorder.dump(
+            reason=classification.reason,
+            exception=e,
+            context="risky_operation",
+            backend="cuda",
+            metadata={"step": step}
+        )
+        print(f"Dump saved to: {dump_path}")
+    raise
+```
+
+## Ring buffer behavior
+
+The flight recorder uses a bounded ring buffer (deque with maxlen):
+
+```python
+# Events are stored in a ring buffer
+recorder = OOMFlightRecorder(
+    OOMFlightRecorderConfig(buffer_size=1000)
+)
+
+# First 1000 events are stored
+for i in range(1500):
+    recorder.record_event({"id": i})
+
+# Only events 500-1499 remain (oldest 500 were evicted)
+events = recorder.snapshot_events()
+print(len(events))  # 1000
+print(events[0]["id"])  # 500
+print(events[-1]["id"])  # 1499
+```
+
+This ensures:
+- Constant memory usage
+- Recent events are always captured
+- No manual cleanup needed
+
+See `oom_flight_recorder.py:82-101` for ring buffer implementation.
+
+## Analyzing OOM dumps
+
+Load and analyze captured dumps:
+
+```python
+import json
+from pathlib import Path
+
+# Find latest dump
+dump_dir = Path("oom_dumps")
+latest_dump = max(dump_dir.glob("oom_dump_*"), key=lambda p: p.stat().st_mtime)
+
+print(f"Analyzing: {latest_dump}")
+
+# Load manifest
+with open(latest_dump / "manifest.json") as f:
+    manifest = json.load(f)
+    print(f"OOM reason: {manifest['reason']}")
+    print(f"Event count: {manifest['event_count']}")
+    print(f"Created: {manifest['created_at_utc']}")
+
+# Load events
+with open(latest_dump / "events.json") as f:
+    events = json.load(f)
+    
+# Analyze memory trend
+allocations = [e['memory_allocated'] for e in events]
+print(f"Memory growth: {(allocations[-1] - allocations[0])/1024**2:.2f} MB")
+print(f"Peak: {max(allocations)/1024**2:.2f} MB")
+
+# Find allocation spikes
+for i in range(1, len(events)):
+    change = events[i]['memory_change']
+    if change > 500 * 1024**2:  # > 500MB
+        print(f"Large allocation at {events[i]['timestamp']}: {change/1024**2:.2f} MB")
+        print(f"  Context: {events[i]['context']}")
+
+# Load metadata
+with open(latest_dump / "metadata.json") as f:
+    metadata = json.load(f)
+    print(f"\nException: {metadata['exception_message'][:100]}...")
+    print(f"Context: {metadata['context']}")
+    print(f"Custom metadata: {metadata['custom_metadata']}")
+```
+
+## Integration with training loops
+
+Recommended pattern for training:
+
+```python
+tracker = MemoryTracker(
+    enable_oom_flight_recorder=True,
+    oom_dump_dir="training_oom_dumps"
+)
+tracker.start_tracking()
+
+for epoch in range(num_epochs):
+    for batch_idx, (data, target) in enumerate(train_loader):
+        metadata = {"epoch": epoch, "batch": batch_idx}
+        
+        with tracker.capture_oom(context="training_batch", metadata=metadata):
+            optimizer.zero_grad()
+            output = model(data)
+            loss = criterion(output, target)
+            loss.backward()
+            optimizer.step()
+
+tracker.stop_tracking()
+
+# Check if any OOMs occurred
+if tracker.last_oom_dump_path:
+    print(f"OOM occurred during training: {tracker.last_oom_dump_path}")
+```
+
+## Custom OOM handlers
+
+Implement custom logic when OOM is detected:
+
+```python
+def handle_oom(exception, tracker):
+    """Custom OOM handler."""
+    dump_path = tracker.handle_exception(
+        exception,
+        context="training",
+        metadata={"model": "resnet50", "batch_size": 32}
+    )
+    
+    if dump_path:
+        print(f"OOM captured: {dump_path}")
+        
+        # Custom actions
+        # 1. Save model checkpoint
+        torch.save(model.state_dict(), "oom_checkpoint.pt")
+        
+        # 2. Reduce batch size and retry
+        reduce_batch_size()
+        
+        # 3. Send alert
+        send_alert(f"OOM in training: {dump_path}")
+        
+        # 4. Log to tracking system
+        wandb.log({"oom_dump": dump_path})
+
+try:
+    train_model()
+except RuntimeError as e:
+    handle_oom(e, tracker)
+    raise
+```
+
+## Best practices
+
+<Tip>
+**Buffer size**: Set `oom_buffer_size` to capture 30-60 seconds of events. At 100ms sampling, that's 300-600 events. More is better for debugging.
+</Tip>
+
+<Tip>
+**Retention**: Keep `max_dumps=3-5`. You rarely need more than a few recent OOMs. Old dumps are less useful as code changes.
+</Tip>
+
+<Tip>
+**Metadata**: Include context in `metadata` parameter: epoch, batch index, learning rate, batch size, etc. This helps correlate OOMs with training state.
+</Tip>
+
+<Warning>
+OOM dumps can contain sensitive information (file paths, environment variables). Don't share them publicly without review.
+</Warning>
+
+## Disabling OOM capture
+
+OOM capture is disabled by default. Explicitly enable it when needed:
+
+```python
+# Disabled (default)
+tracker = MemoryTracker()  # enable_oom_flight_recorder=False
+
+# Enabled
+tracker = MemoryTracker(enable_oom_flight_recorder=True)
+
+# Check if enabled
+if tracker._oom_flight_recorder.config.enabled:
+    print("OOM capture is active")
+```
+
+## Troubleshooting
+
+### OOM not captured
+
+If OOMs aren't being captured:
+
+1. **Check if enabled**: Verify `enable_oom_flight_recorder=True`
+2. **Use handle_exception()**: Ensure you're calling `tracker.handle_exception(e)` or using `capture_oom()` context manager
+3. **Verify exception type**: Use `classify_oom_exception(e)` to check if exception is recognized
+4. **Check permissions**: Ensure write access to `oom_dump_dir`
+
+### Dumps not pruned
+
+If old dumps aren't being deleted:
+
+1. **Check retention settings**: Verify `max_dumps` and `max_total_mb` are set
+2. **Multiple processes**: Each process manages its own dumps independently
+3. **Manual cleanup**: Pruning only happens when new dumps are created
+
+### Missing events
+
+If dumps contain fewer events than expected:
+
+1. **Ring buffer overflow**: Increase `oom_buffer_size`
+2. **Not tracking**: Ensure `tracker.start_tracking()` was called
+3. **Sampling interval**: Decrease `sampling_interval` for more frequent events
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Memory tracking" href="/concepts/tracking">
+    Learn about real-time memory tracking
+  </Card>
+  <Card title="Memory leaks" href="/concepts/memory-leaks">
+    Detect and diagnose memory leaks
+  </Card>
+</CardGroup>

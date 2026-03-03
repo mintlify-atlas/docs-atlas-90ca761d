@@ -1,0 +1,262 @@
+---
+title: Profiler
+description: Core TensorFlow memory profiler for capturing and analyzing GPU memory usage
+---
+
+## TFMemoryProfiler
+
+Main TensorFlow GPU memory profiler class for capturing memory snapshots and profiling functions.
+
+### Constructor
+
+```python
+TFMemoryProfiler(
+    device: Optional[str] = None,
+    enable_tensor_tracking: bool = True
+)
+```
+
+<ParamField path="device" type="str" optional>
+  TensorFlow device name (e.g., '/GPU:0', '/CPU:0'). Defaults to auto-detected device.
+</ParamField>
+
+<ParamField path="enable_tensor_tracking" type="bool" default="True">
+  Whether to track individual tensor lifecycles
+</ParamField>
+
+### Methods
+
+#### capture_snapshot
+
+Capture current memory state at a point in time.
+
+```python
+def capture_snapshot(self, name: str = "snapshot") -> MemorySnapshot
+```
+
+<ParamField path="name" type="str" default="snapshot">
+  Name identifier for the snapshot
+</ParamField>
+
+<ResponseField name="MemorySnapshot" type="object">
+  Snapshot containing timestamp, GPU/CPU memory usage, tensor count, and utilization metrics
+</ResponseField>
+
+#### profile_function
+
+Decorator to profile function memory usage.
+
+```python
+def profile_function(self, func: Callable[..., Any]) -> Callable[..., Any]
+```
+
+<ParamField path="func" type="Callable">
+  Function to profile
+</ParamField>
+
+**Example:**
+
+```python
+profiler = TFMemoryProfiler()
+
+@profiler.profile_function
+def train_model(model, data):
+    # Training code
+    pass
+```
+
+#### profile_context
+
+Context manager for profiling code blocks.
+
+```python
+@contextmanager
+def profile_context(self, name: str = "context") -> Iterator[None]
+```
+
+<ParamField path="name" type="str" default="context">
+  Name for the profiling context
+</ParamField>
+
+**Example:**
+
+```python
+profiler = TFMemoryProfiler()
+
+with profiler.profile_context("training_epoch"):
+    model.fit(x_train, y_train)
+```
+
+#### start_continuous_profiling
+
+Start continuous memory profiling in background thread.
+
+```python
+def start_continuous_profiling(self, interval: float = 1.0) -> None
+```
+
+<ParamField path="interval" type="float" default="1.0">
+  Sampling interval in seconds
+</ParamField>
+
+#### stop_continuous_profiling
+
+Stop continuous memory profiling.
+
+```python
+def stop_continuous_profiling(self) -> None
+```
+
+#### get_results
+
+Get comprehensive profiling results.
+
+```python
+def get_results(self) -> ProfileResult
+```
+
+<ResponseField name="ProfileResult" type="object">
+  <ResponseField name="peak_memory_mb" type="float">
+    Peak memory usage in MB
+  </ResponseField>
+  <ResponseField name="average_memory_mb" type="float">
+    Average memory usage in MB
+  </ResponseField>
+  <ResponseField name="min_memory_mb" type="float">
+    Minimum memory usage in MB
+  </ResponseField>
+  <ResponseField name="duration" type="float">
+    Total profiling duration in seconds
+  </ResponseField>
+  <ResponseField name="memory_growth_rate" type="float">
+    Memory growth rate in MB/second
+  </ResponseField>
+  <ResponseField name="snapshots" type="List[MemorySnapshot]">
+    List of captured memory snapshots
+  </ResponseField>
+  <ResponseField name="function_profiles" type="Dict[str, Dict]">
+    Per-function profiling statistics
+  </ResponseField>
+</ResponseField>
+
+#### reset
+
+Reset profiler state and clear all data.
+
+```python
+def reset(self) -> None
+```
+
+### Usage as context manager
+
+The profiler can be used as a context manager:
+
+```python
+with TFMemoryProfiler() as profiler:
+    # Your code here
+    model.fit(x_train, y_train)
+    
+results = profiler.get_results()
+```
+
+## MemorySnapshot
+
+Represents a point-in-time memory snapshot.
+
+<ResponseField name="timestamp" type="float">
+  Unix timestamp of snapshot
+</ResponseField>
+
+<ResponseField name="name" type="str">
+  Snapshot identifier
+</ResponseField>
+
+<ResponseField name="gpu_memory_mb" type="float">
+  Current GPU memory usage in MB
+</ResponseField>
+
+<ResponseField name="cpu_memory_mb" type="float">
+  Current CPU memory usage in MB
+</ResponseField>
+
+<ResponseField name="gpu_memory_reserved_mb" type="float">
+  Reserved GPU memory in MB
+</ResponseField>
+
+<ResponseField name="gpu_utilization" type="float">
+  GPU memory utilization percentage
+</ResponseField>
+
+<ResponseField name="num_tensors" type="int">
+  Number of active tensors
+</ResponseField>
+
+## ProfileResult
+
+Comprehensive profiling results dataclass.
+
+<ResponseField name="start_time" type="float">
+  Start timestamp
+</ResponseField>
+
+<ResponseField name="end_time" type="float">
+  End timestamp
+</ResponseField>
+
+<ResponseField name="peak_memory_mb" type="float">
+  Peak memory usage
+</ResponseField>
+
+<ResponseField name="average_memory_mb" type="float">
+  Average memory usage
+</ResponseField>
+
+<ResponseField name="total_allocations" type="int">
+  Total memory allocations detected
+</ResponseField>
+
+<ResponseField name="total_deallocations" type="int">
+  Total memory deallocations detected
+</ResponseField>
+
+### Properties
+
+**duration**: Total profiling duration in seconds
+
+**memory_growth_rate**: Memory growth rate in MB/second
+
+## Example
+
+```python
+import tensorflow as tf
+from tfmemprof import TFMemoryProfiler
+
+# Create profiler
+profiler = TFMemoryProfiler(device='/GPU:0')
+
+# Profile a function
+@profiler.profile_function
+def build_model():
+    model = tf.keras.Sequential([
+        tf.keras.layers.Dense(512, activation='relu'),
+        tf.keras.layers.Dense(10, activation='softmax')
+    ])
+    return model
+
+# Capture snapshots
+profiler.capture_snapshot('before_training')
+
+# Profile code blocks
+with profiler.profile_context('training'):
+    model = build_model()
+    model.compile(optimizer='adam', loss='categorical_crossentropy')
+    model.fit(x_train, y_train, epochs=5)
+
+profiler.capture_snapshot('after_training')
+
+# Get results
+results = profiler.get_results()
+print(f"Peak memory: {results.peak_memory_mb:.2f} MB")
+print(f"Average memory: {results.average_memory_mb:.2f} MB")
+print(f"Memory growth rate: {results.memory_growth_rate:.2f} MB/s")
+```

@@ -1,0 +1,403 @@
+---
+title: PyTorch profiling guide
+description: Step-by-step guide to profiling GPU memory usage in PyTorch applications
+---
+
+This guide shows you how to profile and monitor GPU memory usage in PyTorch applications using the GPU Memory Profiler.
+
+## Installation
+
+Install the PyTorch profiler with optional dependencies:
+
+```bash
+pip install 'gpu-memory-profiler[torch]'
+```
+
+For visualization support, include the viz extras:
+
+```bash
+pip install 'gpu-memory-profiler[torch,viz]'
+```
+
+## Quick start
+
+Profile a function with the context profiler:
+
+```python
+from gpumemprof import profile_function, profile_context
+import torch
+
+@profile_function
+def train_step(model, data, target):
+    output = model(data)
+    loss = criterion(output, target)
+    loss.backward()
+    optimizer.step()
+    return loss
+
+# Call the function - automatically profiled
+loss = train_step(model, batch_data, batch_target)
+```
+
+Alternatively, use the context manager for code blocks:
+
+```python
+with profile_context("training_epoch"):
+    for batch in dataloader:
+        output = model(batch)
+        loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+```
+
+## Core profiler
+
+The `GPUMemoryProfiler` provides comprehensive memory profiling:
+
+<Steps>
+  <Step title="Initialize the profiler">
+    Create a profiler instance with your desired configuration:
+
+    ```python
+    from gpumemprof import GPUMemoryProfiler
+
+    profiler = GPUMemoryProfiler(
+        device=0,                      # GPU device ID
+        track_tensors=True,            # Track tensor lifecycle
+        track_cpu_memory=True,         # Include CPU memory
+        collect_stack_traces=False     # Disable for performance
+    )
+    ```
+
+    For multi-GPU systems, specify the device:
+
+    ```python
+    # Profile on GPU 1
+    profiler = GPUMemoryProfiler(device=1)
+    ```
+  </Step>
+
+  <Step title="Profile functions">
+    Profile individual functions to measure their memory footprint:
+
+    ```python
+    def forward_pass(model, input_data):
+        return model(input_data)
+
+    # Profile the function
+    result = profiler.profile_function(forward_pass, model, data)
+
+    # Access profiling results
+    print(f"Function: {result.function_name}")
+    print(f"Execution time: {result.execution_time:.3f}s")
+    print(f"Memory allocated: {result.memory_allocated / (1024**3):.2f} GB")
+    print(f"Memory freed: {result.memory_freed / (1024**3):.2f} GB")
+    print(f"Peak memory: {result.peak_memory_usage() / (1024**3):.2f} GB")
+    print(f"Memory diff: {result.memory_diff() / (1024**3):.2f} GB")
+    ```
+  </Step>
+
+  <Step title="Use context profiling">
+    Profile code blocks with the context manager:
+
+    ```python
+    with profiler.profile_context("model_training"):
+        for epoch in range(num_epochs):
+            for batch in dataloader:
+                optimizer.zero_grad()
+                output = model(batch)
+                loss = criterion(output, target)
+                loss.backward()
+                optimizer.step()
+
+    # Get all profiling results
+    results = profiler.results
+    summary = profiler.get_summary()
+
+    print(f"Peak memory usage: {summary['peak_memory_usage'] / (1024**3):.2f} GB")
+    print(f"Total results: {len(results)}")
+    ```
+  </Step>
+
+  <Step title="Real-time monitoring">
+    Monitor memory continuously during training:
+
+    ```python
+    # Start monitoring with 1-second intervals
+    profiler.start_monitoring(interval=1.0)
+
+    # Your training loop
+    for epoch in range(10):
+        for batch in dataloader:
+            train_step(model, batch)
+
+    # Stop monitoring
+    profiler.stop_monitoring()
+
+    # Review snapshots
+    snapshots = profiler.snapshots
+    print(f"Collected {len(snapshots)} snapshots")
+
+    for snapshot in snapshots[-5:]:
+        print(f"Time: {snapshot.timestamp:.2f}")
+        print(f"Allocated: {snapshot.allocated_memory / (1024**3):.2f} GB")
+        print(f"Reserved: {snapshot.reserved_memory / (1024**3):.2f} GB")
+    ```
+  </Step>
+</Steps>
+
+## Decorator-based profiling
+
+Use the `@profile_function` decorator for automatic profiling:
+
+```python
+from gpumemprof import profile_function
+
+@profile_function
+def create_large_tensor():
+    return torch.randn(10000, 10000, device='cuda')
+
+@profile_function(name="custom_operation")
+def complex_operation(tensor):
+    result = tensor @ tensor.T
+    return result.sum()
+
+# Functions are automatically profiled
+tensor = create_large_tensor()
+result = complex_operation(tensor)
+```
+
+Access profiling results from the global profiler:
+
+```python
+from gpumemprof import get_global_profiler
+
+profiler = get_global_profiler()
+for result in profiler.results:
+    print(f"{result.function_name}: {result.memory_allocated / (1024**2):.2f} MB")
+```
+
+## Backend support
+
+The profiler automatically detects your PyTorch backend:
+
+<Tabs>
+  <Tab title="CUDA/ROCm">
+    For NVIDIA or AMD GPUs:
+
+    ```python
+    from gpumemprof import GPUMemoryProfiler, detect_torch_runtime_backend
+
+    backend = detect_torch_runtime_backend()
+    print(f"Detected backend: {backend}")  # 'cuda' or 'rocm'
+
+    profiler = GPUMemoryProfiler(device='cuda:0')
+    ```
+
+    The profiler uses `torch.cuda` APIs for memory tracking.
+  </Tab>
+
+  <Tab title="MPS (Apple Silicon)">
+    For Apple Silicon GPUs:
+
+    ```python
+    import torch
+    from gpumemprof import MemoryTracker
+
+    if torch.backends.mps.is_available():
+        tracker = MemoryTracker(
+            device='mps',
+            sampling_interval=0.5
+        )
+        tracker.start_tracking()
+
+        # Your code here
+        model = model.to('mps')
+        output = model(data.to('mps'))
+
+        tracker.stop_tracking()
+        stats = tracker.get_statistics()
+        print(f"Peak memory: {stats['peak_memory'] / (1024**3):.2f} GB")
+    ```
+  </Tab>
+
+  <Tab title="CPU mode">
+    For CPU-only profiling:
+
+    ```python
+    from gpumemprof import CPUMemoryProfiler, CPUMemoryTracker
+
+    # Profiler for function/context profiling
+    profiler = CPUMemoryProfiler()
+    profiler.start_monitoring(interval=0.5)
+
+    # Your code here
+    for i in range(100):
+        large_tensor = torch.randn(5000, 5000)
+        result = large_tensor @ large_tensor.T
+
+    profiler.stop_monitoring()
+    summary = profiler.get_summary()
+    print(f"Peak RSS: {summary['peak_memory_usage'] / (1024**2):.2f} MB")
+
+    # Tracker for real-time monitoring
+    tracker = CPUMemoryTracker(sampling_interval=0.5)
+    tracker.start_tracking()
+    # ... your code ...
+    tracker.stop_tracking()
+    ```
+  </Tab>
+</Tabs>
+
+## Memory tracking
+
+Use `MemoryTracker` for real-time monitoring with alerts:
+
+```python
+from gpumemprof import MemoryTracker
+
+tracker = MemoryTracker(
+    device='cuda:0',
+    sampling_interval=0.1,         # Sample every 100ms
+    max_events=10000,              # Keep 10k events in memory
+    enable_alerts=True             # Enable threshold alerts
+)
+
+# Configure thresholds
+tracker.set_threshold('memory_warning_percent', 80.0)
+tracker.set_threshold('memory_critical_percent', 95.0)
+
+# Add alert callback
+def alert_handler(event):
+    print(f"ALERT: {event.event_type} - {event.context}")
+    print(f"Memory: {event.memory_allocated / (1024**3):.2f} GB")
+
+tracker.add_alert_callback(alert_handler)
+
+# Start tracking
+tracker.start_tracking()
+
+# Your training code
+try:
+    for epoch in range(num_epochs):
+        for batch in dataloader:
+            output = model(batch)
+            loss = criterion(output)
+            loss.backward()
+            optimizer.step()
+finally:
+    tracker.stop_tracking()
+
+# Get statistics
+stats = tracker.get_statistics()
+print(f"Total events: {stats['total_events']}")
+print(f"Peak memory: {stats['peak_memory'] / (1024**3):.2f} GB")
+print(f"Alert count: {stats['alert_count']}")
+
+# Export events
+tracker.export_events('tracking_data.json', format='json')
+```
+
+## Profiled modules
+
+Wrap PyTorch modules to automatically profile forward passes:
+
+```python
+from gpumemprof import ProfiledModule
+import torch.nn as nn
+
+# Original model
+model = nn.Sequential(
+    nn.Linear(1000, 500),
+    nn.ReLU(),
+    nn.Linear(500, 10)
+)
+
+# Wrap with profiling
+profiled_model = ProfiledModule(model, name="classifier")
+
+# Forward passes are automatically profiled
+output = profiled_model(input_data)
+
+# Access profiling results
+profiler = profiled_model.profiler
+for result in profiler.results:
+    print(f"{result.function_name}: {result.execution_time:.3f}s")
+```
+
+## OOM flight recorder
+
+Capture memory state when out-of-memory errors occur:
+
+```python
+from gpumemprof import MemoryTracker
+
+tracker = MemoryTracker(
+    device='cuda:0',
+    enable_oom_flight_recorder=True,
+    oom_dump_dir='./oom_dumps',
+    oom_buffer_size=5000,
+    oom_max_dumps=10,
+    oom_max_total_mb=512
+)
+
+tracker.start_tracking()
+
+try:
+    with tracker.capture_oom(
+        context="training_loop",
+        metadata={"epoch": epoch, "batch": batch_idx}
+    ):
+        # Code that might OOM
+        output = model(large_batch)
+        loss = criterion(output)
+        loss.backward()
+except RuntimeError as e:
+    print(f"Captured OOM: {e}")
+    if tracker.last_oom_dump_path:
+        print(f"Dump saved to: {tracker.last_oom_dump_path}")
+```
+
+## Get system info
+
+Check GPU availability and configuration:
+
+```python
+from gpumemprof import get_gpu_info, get_system_info
+
+# System information
+system_info = get_system_info()
+print(f"Platform: {system_info['platform']}")
+print(f"Python version: {system_info['python_version']}")
+print(f"CUDA available: {system_info['cuda_available']}")
+print(f"Detected backend: {system_info.get('detected_backend', 'cpu')}")
+
+if system_info['cuda_available']:
+    print(f"CUDA version: {system_info['cuda_version']}")
+    print(f"Device count: {system_info['cuda_device_count']}")
+
+    # GPU information
+    gpu_info = get_gpu_info(device=0)
+    print(f"\nGPU 0 Information:")
+    print(f"Name: {gpu_info['device_name']}")
+    print(f"Total memory: {gpu_info['total_memory'] / (1024**3):.2f} GB")
+    print(f"Allocated: {gpu_info['allocated_memory'] / (1024**3):.2f} GB")
+    print(f"Reserved: {gpu_info['reserved_memory'] / (1024**3):.2f} GB")
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="CLI usage" icon="terminal" href="/guides/cli-usage">
+    Learn to use gpumemprof from the command line
+  </Card>
+  <Card title="Visualization" icon="chart-line" href="/guides/visualization">
+    Generate plots and export profiling data
+  </Card>
+  <Card title="TUI dashboard" icon="window" href="/guides/tui-dashboard">
+    Use the interactive terminal dashboard
+  </Card>
+  <Card title="CPU mode" icon="microchip" href="/guides/cpu-mode">
+    Profile CPU memory when GPU is unavailable
+  </Card>
+</CardGroup>
