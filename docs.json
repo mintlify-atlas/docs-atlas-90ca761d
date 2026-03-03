@@ -10,12 +10,12 @@
   "navbar": {
     "primary": {
       "type": "github",
-      "href": "https://github.com/Silas-Asamoah/stormlog"
+      "href": "https://github.com/Silas-Asamoah/gpu-memory-profiler"
     }
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/Silas-Asamoah/stormlog"
+      "github": "https://github.com/Silas-Asamoah/gpu-memory-profiler"
     }
   },
   "navigation": {
