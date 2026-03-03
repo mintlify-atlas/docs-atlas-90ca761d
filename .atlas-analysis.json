@@ -1,0 +1,133 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "GPU Memory Profiler",
+  "projectDescription": "Production-ready GPU memory profiling, leak detection, and optimization for PyTorch and TensorFlow workflows",
+  "theme": "aspen",
+  "primaryColor": "#E74C3C",
+  "lightColor": "#3498DB",
+  "darkColor": "#2C3E50",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/profiling",
+              "concepts/tracking",
+              "concepts/memory-leaks",
+              "concepts/oom-detection"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/pytorch",
+              "guides/tensorflow",
+              "guides/cli-usage",
+              "guides/cpu-mode",
+              "guides/tui-dashboard",
+              "guides/visualization"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/basic-profiling",
+              "examples/context-managers",
+              "examples/leak-detection",
+              "examples/oom-recorder",
+              "examples/telemetry-export"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/architecture",
+              "advanced/telemetry-schema",
+              "advanced/compatibility",
+              "advanced/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "PyTorch (gpumemprof)",
+            "pages": [
+              "api/pytorch/profiler",
+              "api/pytorch/tracker",
+              "api/pytorch/context-profiler",
+              "api/pytorch/cpu-profiler",
+              "api/pytorch/analyzer",
+              "api/pytorch/visualizer",
+              "api/pytorch/oom-recorder",
+              "api/pytorch/telemetry",
+              "api/pytorch/utils"
+            ]
+          },
+          {
+            "group": "TensorFlow (tfmemprof)",
+            "pages": [
+              "api/tensorflow/profiler",
+              "api/tensorflow/tracker",
+              "api/tensorflow/context-profiler",
+              "api/tensorflow/analyzer",
+              "api/tensorflow/visualizer",
+              "api/tensorflow/utils"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "api/cli/gpumemprof",
+              "api/cli/tfmemprof",
+              "api/cli/gpu-profiler"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time GPU memory monitoring for PyTorch and TensorFlow",
+    "Automatic memory leak detection with configurable alerts",
+    "OOM (Out-of-Memory) flight recorder for crash analysis",
+    "Interactive TUI dashboard with live visualizations",
+    "Context managers and decorators for easy integration",
+    "CPU compatibility mode for development without GPU",
+    "Data export to CSV and JSON formats",
+    "Comprehensive CLI tools for automation"
+  ],
+  "publicApiSurface": [
+    "gpumemprof.GPUMemoryProfiler",
+    "gpumemprof.MemoryTracker",
+    "gpumemprof.CPUMemoryProfiler",
+    "gpumemprof.CPUMemoryTracker",
+    "gpumemprof.profile_context",
+    "gpumemprof.profile_function",
+    "gpumemprof.MemoryAnalyzer",
+    "gpumemprof.MemoryVisualizer",
+    "gpumemprof.OOMFlightRecorder",
+    "gpumemprof.TelemetryEventV2",
+    "tfmemprof.TFMemoryProfiler",
+    "tfmemprof.TensorFlowProfiler",
+    "tfmemprof.TensorFlowMemoryTracker",
+    "tfmemprof.TensorFlowAnalyzer",
+    "tfmemprof.TensorFlowVisualizer",
+    "CLI: gpumemprof [info|monitor|track|analyze|diagnose]",
+    "CLI: tfmemprof [info|monitor|track|analyze|diagnose]",
+    "CLI: gpu-profiler (TUI dashboard)"
+  ]
+}
